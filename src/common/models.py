@@ -16,7 +16,7 @@ class IngestRequest(BaseModel):
 
 
 class IngestMessage(BaseModel):
-    """Service Bus message — upload-api → embedding-worker."""
+    """RQ ingest job — upload-api → embedding-worker."""
 
     document_id: str
     blob_path: str

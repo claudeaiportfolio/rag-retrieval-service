@@ -1,69 +1,58 @@
-# rag-ingestion-platform — final re-grade scorecard (post-rework)
+# rag-retrieval-service — production-bar scorecard
 
-Re-grade of the final state against the **same dimensions** as the 2026-06-20
-baseline review, so the before/after is apples-to-apples. Baseline preserved in
-`rag-original-review-scorecard.md`.
+Re-grade of the service against the **same dimensions** as the 2026-06-20
+baseline review, so before/after is apples-to-apples. Baseline preserved in
+[`rag-original-review-scorecard.md`](rag-original-review-scorecard.md).
 
-**Grading lens (unchanged):** *"what I'd expect to pass review at a company
-running this in production"* — not the (already-strong) portfolio bar.
+**Grading lens:** *"what I'd expect to pass review at a company running this in
+production"* — not the (already-strong) portfolio bar.
 
-## Overall: B+ → **A−**  (~75–80% → ~90% of the way to production)
+## Overall: B+ → **A−**
 
-The baseline's verdict was "architecture is production-grade; what's missing is
-the unglamorous hardening — retries, a couple of real security gaps, test depth."
-**That hardening is now done**, and on top of it the rework added the role-headline
-capabilities (eval-driven judgment, an agentic layer, Redis/RQ + KEDA) that the
-original repo didn't have. What keeps it from a clean A is operational, not
-architectural: the latest images aren't redeployed, CI still has no automated
-integration tests, and GitOps is on manual sync.
+The baseline verdict was "architecture is production-grade; what's missing is the
+unglamorous hardening — retries, a couple of real security gaps, test depth."
+That hardening landed, and the evolution into a retrieval *service* added the
+JD-headline depth the demo lacked: hybrid + rerank + freshness with the eval that
+proves the reranker earns its cost, an explicit context-assembly policy, a real
+versioned API surface, and scaling/latency as measured artefacts. What keeps it
+from a clean A is operational: the live per-stage latency/autoscale numbers are
+captured by running the committed targets against the brought-up stack (the
+machinery is in; the rendered graphs land from that run).
 
 ## Re-grade — same dimensions as baseline
 
-Same `Dimension | Grade | Note` shape as the baseline, with the baseline grade
-kept inline so the movement is visible at a glance.
-
 | Dimension | Grade (was → now) | Note (now) |
 |---|---|---|
-| Architecture / decoupling | A → **A** | Clean async preserved through the SB→RQ swap and the added agentic path; agent runtime extracted to a shared package. |
-| Identity & secrets | A− → **A** | Hardcoded UUID gone (placeholders → git-ignored `build/`); Auth0 M2M, 15-min TTL; secret passed directly, never via `os.environ` (a gate-caught CRITICAL, fixed). |
-| Observability | A → **A** | GenAI/MCP semconv spans + JSONL traces that the eval suite consumes; non-fatal setup. (Instrumentation only — no live dashboard this session.) |
-| Security (authz) | C → **A−** | Per-tool scope enforcement wired + enforced (PyJWT, `python-jose` dropped, JWKS TTL), incl. the new agentic tool; two further review CRITICALs fixed. Minus: wrong-scope rejection not re-verified live this session. |
-| Resilience / error handling | C+ → **A−** | `tenacity` on model calls, dead-letter for poison jobs, DB-touching `/readyz`, batch splitting, RQ `Retry`. Minus: `Retry` was inert without `work(with_scheduler=True)` — fixed in code, not yet redeployed. |
-| Testing | C+ → **B** | `mypy` CI gate; 25 unit tests incl. agent retrieve-tool + auth-scope logic; a real live E2E (ingest → KEDA → retrieve → eval). Minus: no automated integration tests in CI (deliberate prod-E2E-over-stubs). |
-| Packaging / CI / Docker | B+ → **A−** | centralise-don't-copy realised — `platform-core` / `agent-core` (v0.1.2) / `agent-evals` via pinned tags; org-wide shared security action; 4 image builds + test + blocking secret-scan; Docker lock fallback removed. |
-| Readability / style | A → **A** | ruff + mypy clean across 21 source files; consistent, typed, well-commented. |
-| Compliance posture (SOC 2 / ISO 27001) † | — → **B** | Strong control *primitives* — per-tool least-privilege scope enforcement, 15-min M2M tokens, Key Vault secrets + blocking leak scan, TLS, PR/IaC change management, OTel audit trails, retries/dead-letter/HA — mapped to SOC 2 CC and ISO 27001 Annex A. It's an unaudited demo, so the governance/evidence layer (policies, log retention, access reviews, DR drills, pen test) is out of scope. Full mapping: [`COMPLIANCE.md`](COMPLIANCE.md). |
+| Architecture / decoupling | A → **A** | Determinate retrieval pipeline (hybrid → fuse → rerank → assemble → answer); the agent loop was *removed by design* (it reproduced a 6× negative on single-hop) and relocated to piece 2. |
+| Identity & secrets | A− → **A** | Entra ID Workload Identity Federation; Auth0 M2M; Key Vault + ESO; no secret via `os.environ`; identifying values render into a git-ignored `build/`, blocking leak scan on push + PR. |
+| Observability | A → **A−** | GenAI/MCP semconv spans + per-stage `timings_ms` on `/v1/answer`; Grafana dashboard committed. Minus: live rendered graphs pending the capture run. |
+| Security (authz) | C → **A−** | Per-scope Auth0 JWT centralised in `common/auth.py` and enforced on both the HTTP routes and the MCP tools (`require_scope` / per-tool scopes); PyJWT + JWKS TTL. Minus: wrong-scope rejection not re-verified live this session. |
+| Resilience / error handling | C+ → **A−** | `tenacity` on the model call (both provider arms), dead-letter for poison ingest jobs, DB-touching `/readyz`, RQ `Retry`, read-replica for the query path. |
+| Testing | C+ → **B+** | `mypy` + `ruff` CI gates; 30 unit tests incl. RRF fusion, freshness, assembly packing/compression, the provider swap test, and auth-scope logic. Minus: no automated integration tests in CI (deliberate live-E2E-over-stubs). |
+| Packaging / CI / Docker | B+ → **A−** | centralise-don't-copy realised — `llm-provider` (new) / `agent-evals` / `platform-core` via pinned tags; shared org security action; published OpenAPI. |
+| Readability / style | A → **A** | ruff + mypy clean across 23 source files; typed, well-commented, the *why* in the code. |
+| Compliance posture (SOC 2 / ISO 27001) † | — → **B** | Strong control *primitives* — per-scope least-privilege authz, M2M tokens, Key Vault + blocking leak scan, TLS, workload identity, residency-driven self-hosted eval surface, OTel audit trails — mapped in [`COMPLIANCE.md`](COMPLIANCE.md). Unaudited demo: governance/evidence layer (policies, retention, access reviews, DR, pen test) is out of scope. |
 
-† New dimension — not assessed in the original baseline; added for the regulated/fintech context of the target role.
+† New dimension for the regulated/fintech context — not assessed at baseline.
 
-## New capabilities (role headline — not gradeable at baseline, didn't exist)
+## New capabilities (role headline — didn't exist at baseline)
 
 | Capability | Grade | Evidence |
 |---|---|---|
-| LLM evaluation (accuracy / safety) | **A** | recall@k (deterministic) + `agent-evals` judge (groundedness / faithfulness / refusal); **live** single-shot-vs-agentic numbers in `EVAL_FINDINGS.md`; caught + corrected two measurement artifacts mid-run. The eval-driven *judgment* (incl. reporting a negative result honestly) is the strongest signal for the role. |
-| Multi-agent / agentic RAG | **B+** | `rag_agent` plan→retrieve→critique→answer on `agent-core`; MCP tool `query_knowledge_agentic`. Built and **measured** — it underperformed single-shot on this single-hop corpus (0.83 vs 0.98 groundedness, ~6× latency). Built+measured+honest > built+hyped; the corpus not favouring agentic is a fair limitation, not a defect. |
-| Background workers / RQ / Redis + KEDA | **A** | Service Bus → RQ on self-hosted Redis (ACL-scoped, ESO secrets); **live** KEDA scale-to-zero 0→10→0 on list depth (50 jobs, 0 failed). Literal JD bullets. |
-| Reuse / packaging hygiene | **A−** | Three shared packages + central TF modules + a shared security action; real consumption via pinned git tags, not copy-paste. |
+| Production-RAG depth | **A−** | Hybrid (BM25 + pgvector, RRF) + cross-encoder rerank + content-hash dedup + freshness. `make eval-rerank` measures the recall@k / p95 ON-vs-OFF delta — the reranker is justified by a number, not fashion. |
+| Context engineering | **A−** | Explicit, swappable assembly policy under a token budget; `make eval-assembly` produces the policy × (accuracy, tokens, latency) table. Treats "what goes in the window" as a measured tradeoff. |
+| API experience | **A** | Versioned `/v1/search` + `/v1/answer`, typed Pydantic contracts, per-scope JWT, published OpenAPI; MCP alongside for agents. One service, the right interface per consumer class. |
+| Provider portability | **A−** | `llm-provider` seam (Claude + OpenAI) in `ai-infra-templates`; swap is one config value, proven by a swap test green on both arms. |
+| Scaling + latency | **B+** | Per-stage latency instrumentation + `make loadtest` (committed PNG); KEDA 0→10→0; token-cost panel. Live numbers from the capture run. |
 
-## Baseline gaps — all closed
+## Remaining gaps to a clean A
 
-1. Dead per-tool scope enforcement → **wired + enforced** (PyJWT). ✅
-2. `python-jose` CVEs / no-TTL JWKS / sync httpx → **PyJWT + TTL**. ✅
-3. Hardcoded MI client_id in `scaledobject.yaml` → **placeholder-rendered**. ✅
-4. No model-call resilience / per-call clients / no batch limits → **tenacity + batching**. ✅
-5. Portfolio-level test depth, no type gate → **mypy gate + broader units + live E2E**. ✅
-6. Liveness-only health, no dead-letter, unused `index_type`, Docker lock fallback → **all fixed**. ✅
-
-## Remaining gaps to a clean A (production-ready)
-
-- **Redeploy** the latest images — the `with_scheduler` fix and `query_knowledge_agentic`
-  are on `main` + built by CI but the (now torn-down) cluster ran older images.
-- **Automated integration tests in CI** — currently relies on a manually-driven live E2E.
-- **GitOps render-on-sync** — the rag Argo app is on manual sync (placeholder rendering).
-- **Live performance monitoring** — OTel is wired; no dashboard/SLO artifact shown.
-- **Agentic value** — needs a genuinely multi-hop corpus to show where the loop earns its
-  latency; the current finding is "don't pay 6× for single-hop", which is itself the right call.
+- **Live capture** — run the load test + autoscale + Grafana against the
+  brought-up stack and commit the rendered graphs (machinery is in; teardown is
+  the `make teardown-full` standard).
+- **Automated integration tests in CI** — currently relies on a live E2E.
+- **GitOps render-on-sync** — placeholder rendering on manual sync.
 
 ---
-_Re-graded 2026-06-21 against `rag-original-review-scorecard.md`. Live evidence in
-`EVAL_FINDINGS.md`; build history in PRs #1–#8._
+_Re-graded against `rag-original-review-scorecard.md`. Source of truth:
+`SCOPING_1_rag_retrieval_service.md`._
