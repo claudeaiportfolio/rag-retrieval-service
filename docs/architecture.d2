@@ -1,0 +1,178 @@
+# rag-ingestion-platform — architecture
+# Render: d2 docs/architecture.d2 docs/architecture.svg
+# Generated from docs/ARCHITECTURE.md, terraform/, k8s/, src/common/config.py
+
+direction: right
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+client: MCP client (Claude / agents) {
+  shape: person
+}
+
+# ---------------------------------------------------------------------------
+# AKS cluster
+# ---------------------------------------------------------------------------
+aks: AKS cluster {
+  style.fill: "#f3f6fb"
+
+  gateway: Envoy Gateway {
+    style.fill: "#e7eefc"
+    explanation: |md
+      `cluster-issuer-gateway`
+      envoy-gateway-system
+      TLS for *.dev.michaelalinks.com
+      Auth0 JWT verify (SecurityPolicy)
+    |
+  }
+
+  query: query namespace {
+    style.fill: "#eafaf1"
+
+    mcp: mcp-server {
+      explanation: |md
+        Auth0 JWT gate
+        MCP tools: ingest_document,
+        query_knowledge
+        single replica
+      |
+    }
+    retrieval: retrieval-api {
+      explanation: |md
+        HPA CPU 60% (2-8)
+        embed query, cosine search,
+        rerank, LLM answer
+      |
+    }
+  }
+
+  ingestion: ingestion namespace {
+    style.fill: "#fef6e7"
+
+    upload: upload-api {
+      explanation: |md
+        blob put + SB enqueue
+        returns document_id
+      |
+    }
+    worker: embedding-worker {
+      explanation: |md
+        KEDA 0->N->0 (max 10)
+        spot nodepool
+        chunk + embed + INSERT
+      |
+    }
+  }
+
+  keda: KEDA {
+    style.fill: "#f5e7fe"
+    explanation: |md
+      ScaledObject
+      trigger: SB messageCount
+    |
+  }
+
+  otel: otel-collector {
+    style.fill: "#e7f6fa"
+    explanation: |md
+      shared, in-cluster
+      OTLP gRPC traces + logs
+    |
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Azure (Terraform-managed)
+# ---------------------------------------------------------------------------
+azure: Azure (Terraform) {
+  style.fill: "#f3f6fb"
+
+  sb: Service Bus {
+    explanation: |md
+      queue: embed-jobs
+      lock TTL 5 min
+    |
+  }
+  storage: Blob Storage {
+    explanation: |md
+      container: documents
+      tenant/raw, tier-to-cool 30d
+    |
+  }
+  pg: Postgres Flexible + pgvector {
+    explanation: |md
+      chunks(embedding vector(1536))
+      HNSW index
+      primary + replica
+    |
+  }
+  aoai: Azure OpenAI {
+    explanation: |md
+      embedding + chat deployments
+      workload identity
+    |
+  }
+  kv: Key Vault {
+    explanation: |md
+      anthropic-portfolio-key,
+      auth0-domain
+    |
+  }
+  identity: Managed identities {
+    explanation: |md
+      4 UAMIs federated to
+      AKS OIDC issuer
+      per-workload RBAC
+    |
+  }
+}
+
+anthropic: Anthropic API {
+  shape: cloud
+  explanation: |md
+    optional LLM backend
+    GENERATION_BACKEND=anthropic
+  |
+}
+
+# ---------------------------------------------------------------------------
+# Edges — ingest path
+# ---------------------------------------------------------------------------
+client -> aks.gateway: MCP (JWT-signed) {style.stroke: "#2d6cdf"}
+aks.gateway -> aks.query.mcp: ingest.rag.* / rag.*
+aks.query.mcp -> aks.ingestion.upload: POST /documents
+aks.ingestion.upload -> azure.storage: blob put
+aks.ingestion.upload -> azure.sb: IngestMessage
+
+azure.sb -> aks.keda: messageCount {style.stroke-dash: 3}
+aks.keda -> aks.ingestion.worker: scale 0->N {style.stroke-dash: 3; style.stroke: "#8b3ddf"}
+azure.sb -> aks.ingestion.worker: receive batch
+aks.ingestion.worker -> azure.storage: download blob
+aks.ingestion.worker -> azure.aoai: embed
+aks.ingestion.worker -> azure.pg: INSERT chunks (primary)
+
+# ---------------------------------------------------------------------------
+# Edges — query path
+# ---------------------------------------------------------------------------
+aks.gateway -> aks.query.retrieval: retrieve.rag.* (eval-only)
+aks.query.mcp -> aks.query.retrieval: query_knowledge (ClusterIP)
+aks.query.retrieval -> azure.aoai: embed query
+aks.query.retrieval -> azure.pg: cosine search (replica)
+aks.query.retrieval -> anthropic: generate (optional) {style.stroke-dash: 3}
+aks.query.retrieval -> azure.aoai: generate (default)
+
+# ---------------------------------------------------------------------------
+# Edges — cross-cutting
+# ---------------------------------------------------------------------------
+aks.query.mcp -> azure.kv: load secrets {style.stroke-dash: 3}
+aks.query.retrieval -> azure.kv: load secrets {style.stroke-dash: 3}
+azure.identity -> aks: workload identity (OIDC) {style.stroke-dash: 3; style.stroke: "#888"}
+
+aks.ingestion.upload -> aks.otel: OTLP {style.stroke-dash: 5; style.stroke: "#3aa6bd"}
+aks.ingestion.worker -> aks.otel: OTLP {style.stroke-dash: 5; style.stroke: "#3aa6bd"}
+aks.query.mcp -> aks.otel: OTLP {style.stroke-dash: 5; style.stroke: "#3aa6bd"}
+aks.query.retrieval -> aks.otel: OTLP {style.stroke-dash: 5; style.stroke: "#3aa6bd"}

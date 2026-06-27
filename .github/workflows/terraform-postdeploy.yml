@@ -1,0 +1,61 @@
+name: terraform postdeploy
+
+# Bootstraps anything that has to land on the live infra after a
+# terraform-apply: today that's CREATE EXTENSION vector and the rag schema.
+# Always dispatch-only.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      # PG_HOST + WORKLOAD_DB_PRINCIPALS are derived from terraform outputs in
+      # the tfout step below — no identifying values committed in this workflow.
+      PG_DATABASE: rag
+      PG_USER: ${{ secrets.PG_CI_ADMIN_PRINCIPAL_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.9'
+
+      - id: tfout
+        working-directory: terraform
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_USE_AZUREAD: 'true'
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform init -input=false -lock=false
+          out=$(terraform output -json)
+          for k in upload_api embedding_worker retrieval_api mcp_server; do
+            key=$(echo "$k" | tr '[:lower:]' '[:upper:]')_PRINCIPAL_ID
+            val=$(echo "$out" | jq -r ".identity.value.$k.principal_id")
+            echo "$key=$val" >> "$GITHUB_ENV"
+          done
+          echo "PG_HOST=$(echo "$out" | jq -r '.postgres.value.primary_fqdn')" >> "$GITHUB_ENV"
+          principals=$(echo "$out" | jq -r '[.identity.value[].name] | join(",")')
+          echo "WORKLOAD_DB_PRINCIPALS=$principals" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen
+
+      - run: uv run python scripts/pg_bootstrap.py

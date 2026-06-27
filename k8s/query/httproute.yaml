@@ -1,0 +1,43 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-server
+  namespace: query
+spec:
+  hostnames:
+    - rag.dev.michaelalinks.com
+  parentRefs:
+    - name: cluster-issuer-gateway
+      namespace: envoy-gateway-system
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: mcp-server
+          port: 8080
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: retrieval-api
+  namespace: query
+spec:
+  # Internal-flavoured hostname for the evals + experiments harness. The
+  # production agent path is rag.dev.michaelalinks.com → mcp-server (Auth0).
+  hostnames:
+    - rag-retrieve.dev.michaelalinks.com
+  parentRefs:
+    - name: cluster-issuer-gateway
+      namespace: envoy-gateway-system
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: retrieval-api
+          port: 8080
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

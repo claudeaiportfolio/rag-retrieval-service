@@ -1,0 +1,19 @@
+# Pre-commit gates. Install once: `pre-commit install`.
+# gitleaks is the security gate (see .gitleaks.toml); ruff is the lint gate.
+# gitleaks is provisioned via the package-installs Brewfile, so this uses the
+# system binary rather than building it per-hook.
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (no identifying values / secrets)
+        entry: gitleaks git --staged --redact --no-banner -c .gitleaks.toml
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|evals|scripts)/

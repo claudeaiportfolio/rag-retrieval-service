@@ -1,0 +1,23 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: mcp-server-jwt
+  namespace: query
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp-server
+  jwt:
+    providers:
+      - name: auth0
+        issuer: https://michaelalinks.uk.auth0.com/
+        audiences:
+          - https://rag.dev.michaelalinks.com
+        remoteJWKS:
+          uri: https://michaelalinks.uk.auth0.com/.well-known/jwks.json
+        claimToHeaders:
+          - claim: sub
+            header: x-auth-sub
+          - claim: scope
+            header: x-auth-scope

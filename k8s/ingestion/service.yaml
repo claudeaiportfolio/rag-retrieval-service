@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: upload-api
+  namespace: ingestion
+spec:
+  type: ClusterIP
+  selector:
+    app: upload-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

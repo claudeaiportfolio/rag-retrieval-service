@@ -1,0 +1,39 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: redis-keda-auth
+  namespace: ingestion
+spec:
+  # KEDA reads the queue depth as the read-only `keda` ACL user; password comes
+  # from the ESO-synced redis-credentials Secret (no raw secret in git).
+  secretTargetRef:
+    - parameter: password
+      name: redis-credentials
+      key: redis-password
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: embedding-worker
+  namespace: ingestion
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: embedding-worker
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 120
+  pollingInterval: 15
+  triggers:
+    - type: redis
+      metadata:
+        # RQ stores the queue as the Redis list `rq:queue:<name>`; KEDA scales on
+        # its length — preserving 0 -> N -> 0.
+        address: redis.redis.svc.cluster.local:6379
+        listName: rq:queue:embed-jobs
+        listLength: '5'
+        activationListLength: '1'
+        username: keda
+        enableTLS: 'false'
+      authenticationRef:
+        name: redis-keda-auth

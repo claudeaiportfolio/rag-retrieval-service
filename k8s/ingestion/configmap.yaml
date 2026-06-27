@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+  namespace: ingestion
+data:
+  # Identifying endpoints are rendered from terraform outputs by
+  # scripts/render-k8s.sh into the git-ignored build/ dir — never committed.
+  # This committed copy holds only placeholders so a real value can't leak.
+  KEY_VAULT_URL: 'https://localdevenv.vault.azure.net/'
+  AOAI_ENDPOINT: __AOAI_ENDPOINT__
+  AOAI_EMBEDDING_DEPLOYMENT: 'embedding'
+  AOAI_CHAT_DEPLOYMENT: 'chat'
+  # RQ on shared self-hosted Redis (replaced Service Bus in Phase 2). Host is a
+  # static in-cluster DNS name; the password is injected from the ESO-synced
+  # `redis-credentials` Secret (see externalsecret.yaml), never via configmap.
+  REDIS_HOST: 'redis.redis.svc.cluster.local'
+  REDIS_PORT: '6379'
+  REDIS_USERNAME: 'rag'
+  REDIS_USE_TLS: 'false'
+  RQ_QUEUE_NAME: 'embed-jobs'
+  STORAGE_ACCOUNT: __STORAGE_ACCOUNT__
+  STORAGE_CONTAINER: 'documents'
+  PG_HOST: __PG_PRIMARY_FQDN__
+  PG_REPLICA_HOST: __PG_REPLICA_FQDN__
+  PG_DATABASE: 'rag'
+  # PG_USER is intentionally not set here: every pod that touches Postgres
+  # overrides it via deployment env with its own workload-identity principal.
+  GENERATION_BACKEND: 'aoai'
+  CHUNKING_STRATEGY: 'heading'
+  CHUNK_SIZE_TOKENS: '512'
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'otel-collector.otel.svc.cluster.local:4317'
+  LOG_LEVEL: 'INFO'

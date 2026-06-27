@@ -1,0 +1,56 @@
+name: eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      reingest:
+        description: 'Re-ingest the corpus before scoring (default false).'
+        type: boolean
+        default: false
+      include_judge:
+        description: 'Also run the agent-evals LLM-judge single-shot-vs-agentic comparison (Anthropic-billed).'
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: write  # to commit EVAL_FINDINGS.md updates
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen
+
+      - if: ${{ inputs.reingest }}
+        run: uv run python scripts/ingest_corpus.py
+        env:
+          UPLOAD_API_URL: https://ingest.rag.dev.michaelalinks.com
+          INGEST_TENANT_ID: evals
+
+      - if: ${{ inputs.reingest }}
+        run: sleep 60  # let KEDA spin embedding-worker + drain the queue
+
+      - run: uv run python -m evals.layer1
+        env:
+          RETRIEVAL_API_URL: https://retrieve.rag.dev.michaelalinks.com
+          EVAL_TENANT_ID: evals
+
+      - if: ${{ inputs.include_judge }}
+        run: uv run python -m evals.compare
+        env:
+          RETRIEVAL_API_URL: https://retrieve.rag.dev.michaelalinks.com
+          EVAL_TENANT_ID: evals
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: out/
+          retention-days: 30

@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored
+# because it carries the AAD admin object ID / display name.
+aks_cluster_name   = "localk8scluster"
+aks_resource_group = "kubernetes"
+
+# AAD admin for Postgres:
+#   az ad signed-in-user show --query "{id:id, name:displayName}" -o tsv
+postgres_aad_admin_object_id      = "REPLACE_WITH_YOUR_OBJECT_ID"
+postgres_aad_admin_principal_name = "REPLACE_WITH_YOUR_DISPLAY_NAME"
+postgres_aad_admin_principal_type = "User"

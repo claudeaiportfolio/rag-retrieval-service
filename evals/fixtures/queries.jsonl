@@ -1,0 +1,20 @@
+{"query_id": "q00", "category": "in_corpus", "query": "What are the four initial namespaces in Kubernetes?", "expected_doc": "k8s-namespaces.md", "expected_heading": "Initial namespaces"}
+{"query_id": "q01", "category": "in_corpus", "query": "How do I roll back a Deployment to a previous revision?", "expected_doc": "k8s-deployments.md", "expected_heading": "Rolling Back a Deployment"}
+{"query_id": "q02", "category": "in_corpus", "query": "What are the four Kubernetes Service types?", "expected_doc": "k8s-services.md", "expected_heading": "Service types"}
+{"query_id": "q03", "category": "in_corpus", "query": "What is a headless Service in Kubernetes?", "expected_doc": "k8s-services.md", "expected_heading": "Headless services"}
+{"query_id": "q04", "category": "in_corpus", "query": "How does the HPA algorithm compute desired replicas?", "expected_doc": "k8s-hpa.md", "expected_heading": "Algorithm details"}
+{"query_id": "q05", "category": "in_corpus", "query": "Can KEDA scale workloads to zero like a regular HPA?", "expected_doc": "keda-overview.md", "expected_heading": "Architecture"}
+{"query_id": "q06", "category": "in_corpus", "query": "What is activationMessageCount for in KEDA?", "expected_doc": "keda-overview.md", "expected_heading": "Activation and scaling"}
+{"query_id": "q07", "category": "in_corpus", "query": "What three components make up an OpenTelemetry Collector pipeline?", "expected_doc": "otel-collector.md", "expected_heading": "Components"}
+{"query_id": "q08", "category": "in_corpus", "query": "What is the difference between head and tail sampling in OpenTelemetry?", "expected_doc": "otel-tracing.md", "expected_heading": "Sampling"}
+{"query_id": "q09", "category": "in_corpus", "query": "What information is contained in a span context?", "expected_doc": "otel-tracing.md", "expected_heading": "Span context"}
+{"query_id": "q10", "category": "in_corpus", "query": "What is the difference between HNSW and IVFFlat indexes in pgvector?", "expected_doc": "pgvector-overview.md", "expected_heading": "Index types"}
+{"query_id": "q11", "category": "in_corpus", "query": "What distance functions does pgvector support?", "expected_doc": "pgvector-overview.md", "expected_heading": "Supported distance functions"}
+{"query_id": "q12", "category": "in_corpus", "query": "How does Service Bus handle dead-letter queues?", "expected_doc": "azure-service-bus.md", "expected_heading": "Dead-letter queue"}
+{"query_id": "q13", "category": "in_corpus", "query": "What's the maximum message size on Service Bus Standard tier?", "expected_doc": "azure-service-bus.md", "expected_heading": "Message size limits"}
+{"query_id": "q14", "category": "in_corpus", "query": "How do you make a Kubernetes ConfigMap immutable and why?", "expected_doc": "k8s-configmap.md", "expected_heading": "Immutable ConfigMaps"}
+{"query_id": "q15", "category": "in_corpus", "query": "Compare how KEDA scales to zero with how the HPA computes desired replicas, and explain when each applies.", "expected_doc": "keda-overview.md", "expected_heading": "Architecture"}
+{"query_id": "q16", "category": "out_of_corpus", "query": "How do I configure provisioned concurrency for AWS Lambda cold starts?", "expected_doc": "", "expected_heading": ""}
+{"query_id": "q17", "category": "out_of_corpus", "query": "How does Apache Kafka guarantee exactly-once delivery semantics?", "expected_doc": "", "expected_heading": ""}
+{"query_id": "q18", "category": "out_of_corpus", "query": "What is the recommended dosage of ibuprofen for adults?", "expected_doc": "", "expected_heading": ""}
+{"query_id": "q19", "category": "out_of_corpus", "query": "Write a Terraform module for an AWS S3 bucket with versioning.", "expected_doc": "", "expected_heading": ""}
