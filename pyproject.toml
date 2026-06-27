@@ -13,6 +13,7 @@ dependencies = [
     "azure-storage-blob>=12.24",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
+    "llm-provider @ git+https://github.com/claudeaiportfolio/ai-infra-templates.git@llm-provider-v0.1.0#subdirectory=llm-provider",
     "mcp>=1.27.1",
     "openai>=1.110",
     "opentelemetry-exporter-otlp-proto-grpc>=1.41.1",

@@ -1,14 +1,31 @@
-"""Config-switchable chat completion: Anthropic or Azure OpenAI.
+"""Grounded answer generation via the shared `llm-provider` seam.
 
-Clients are built once and reused; AAD tokens for the AOAI path refresh
-automatically via the token provider. Transient failures (429/5xx/timeouts)
-are retried with exponential backoff on both backends.
+This is the RAG service's *only* LLM call. Provider selection is config-driven
+(`settings.generation_backend`): Claude (public Anthropic) or Azure OpenAI
+(AAD-authed). Both run through the same `LLMProvider` protocol — only client
+construction differs (the seam's OpenAI impl takes an injected client, so the
+AAD-authed `AsyncAzureOpenAI` drops straight in). The seam owns the message /
+tool-result / response translation; this module keeps the app concerns: the
+AAD client, the retry policy, and the GenAI chat span (whose `gen_ai.usage.*`
+attributes feed the token-cost panel).
 """
 
 from __future__ import annotations
 
 import logging
 
+from anthropic import APIConnectionError as AnthropicConnectionError
+from anthropic import APITimeoutError as AnthropicTimeoutError
+from anthropic import InternalServerError as AnthropicInternalServerError
+from anthropic import RateLimitError as AnthropicRateLimitError
+from llm_provider import Message, ProviderConfig
+from llm_provider.anthropic_provider import AnthropicProvider
+from llm_provider.base import LLMProvider
+from llm_provider.openai_provider import OpenAIProvider
+from openai import APIConnectionError as OpenAIConnectionError
+from openai import APITimeoutError as OpenAITimeoutError
+from openai import InternalServerError as OpenAIInternalServerError
+from openai import RateLimitError as OpenAIRateLimitError
 from opentelemetry import trace
 from tenacity import (
     retry,
@@ -33,11 +50,24 @@ tracer = trace.get_tracer(__name__)
 _COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
 _MAX_TOKENS = 1024
 
-_anthropic_client = None
-_aoai_client = None
+# Transient failures from either backend; only one is active per call, but both
+# SDKs are dependencies so importing both exception sets is safe.
+_TRANSIENT = (
+    AnthropicRateLimitError,
+    AnthropicConnectionError,
+    AnthropicTimeoutError,
+    AnthropicInternalServerError,
+    OpenAIRateLimitError,
+    OpenAIConnectionError,
+    OpenAITimeoutError,
+    OpenAIInternalServerError,
+)
+
+# (provider, model, otel_provider_label), built once and reused.
+_provider_cache: tuple[LLMProvider, str, str] | None = None
 
 
-def _backoff():
+def _backoff() -> dict:
     return dict(
         wait=wait_exponential(multiplier=1, min=1, max=30),
         stop=stop_after_attempt(5),
@@ -45,114 +75,55 @@ def _backoff():
     )
 
 
-async def answer(question: str, context: str) -> tuple[str, str]:
-    """Return (answer_text, model_id). Backend chosen via settings.generation_backend."""
+def _build_provider() -> tuple[LLMProvider, str, str]:
     if settings.generation_backend == "anthropic":
-        return await _answer_anthropic(question, context)
-    return await _answer_aoai(question, context)
-
-
-def _anthropic():
-    global _anthropic_client
-    if _anthropic_client is None:
         from anthropic import AsyncAnthropic
 
-        _anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-    return _anthropic_client
+        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        return AnthropicProvider(client=anthropic_client), settings.anthropic_model, "anthropic"
 
+    # Azure OpenAI: AAD token provider (no key), same chat-completions surface
+    # the seam's OpenAI impl speaks.
+    from azure.identity.aio import get_bearer_token_provider
+    from openai import AsyncAzureOpenAI
 
-async def _answer_anthropic(question: str, context: str) -> tuple[str, str]:
-    from anthropic import (
-        APIConnectionError,
-        APITimeoutError,
-        InternalServerError,
-        RateLimitError,
+    from common.azure_clients import credential
+
+    aoai_client = AsyncAzureOpenAI(
+        azure_endpoint=settings.aoai_endpoint,
+        azure_deployment=settings.aoai_chat_deployment,
+        azure_ad_token_provider=get_bearer_token_provider(credential(), _COGNITIVE_SCOPE),
+        api_version="2024-10-21",
     )
+    return OpenAIProvider(client=aoai_client), settings.aoai_chat_deployment, "azure.openai"
 
-    client = _anthropic()
-    model = settings.anthropic_model
 
-    @retry(
-        retry=retry_if_exception_type(
-            (RateLimitError, APIConnectionError, APITimeoutError, InternalServerError)
-        ),
-        **_backoff(),
-    )
+def _provider() -> tuple[LLMProvider, str, str]:
+    global _provider_cache
+    if _provider_cache is None:
+        _provider_cache = _build_provider()
+    return _provider_cache
+
+
+async def answer(question: str, context: str) -> tuple[str, str]:
+    """Return (answer_text, model_id) for the configured backend, via the seam."""
+    provider, model, label = _provider()
+    config = ProviderConfig(model=model, system=_SYSTEM_PROMPT, max_tokens=_MAX_TOKENS)
+    messages = [Message(role="user", content=_user_prompt(question, context))]
+
+    @retry(retry=retry_if_exception_type(_TRANSIENT), **_backoff())
     async def _call():
-        return await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": _user_prompt(question, context)}],
-        )
+        return await provider.complete(messages, config=config)
 
     with tracer.start_as_current_span("chat") as span:
-        span.set_attribute(GEN_AI_PROVIDER_NAME, "anthropic")
+        span.set_attribute(GEN_AI_PROVIDER_NAME, label)
         span.set_attribute(GEN_AI_REQUEST_MODEL, model)
         span.set_attribute(GEN_AI_OPERATION_NAME, "chat")
-        msg = await _call()
-        text = "".join(block.text for block in msg.content if block.type == "text")
-        span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, msg.usage.input_tokens)
-        span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, msg.usage.output_tokens)
-        span.set_attribute(GEN_AI_RESPONSE_MODEL, msg.model)
-        return text, msg.model
-
-
-def _aoai():
-    global _aoai_client
-    if _aoai_client is None:
-        from azure.identity.aio import get_bearer_token_provider
-        from openai import AsyncAzureOpenAI
-
-        from common.azure_clients import credential
-
-        _aoai_client = AsyncAzureOpenAI(
-            azure_endpoint=settings.aoai_endpoint,
-            azure_deployment=settings.aoai_chat_deployment,
-            azure_ad_token_provider=get_bearer_token_provider(
-                credential(), _COGNITIVE_SCOPE
-            ),
-            api_version="2024-10-21",
-        )
-    return _aoai_client
-
-
-async def _answer_aoai(question: str, context: str) -> tuple[str, str]:
-    from openai import (
-        APIConnectionError,
-        APITimeoutError,
-        InternalServerError,
-        RateLimitError,
-    )
-
-    client = _aoai()
-
-    @retry(
-        retry=retry_if_exception_type(
-            (RateLimitError, APIConnectionError, APITimeoutError, InternalServerError)
-        ),
-        **_backoff(),
-    )
-    async def _call():
-        return await client.chat.completions.create(
-            model=settings.aoai_chat_deployment,
-            max_tokens=_MAX_TOKENS,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(question, context)},
-            ],
-        )
-
-    with tracer.start_as_current_span("chat") as span:
-        span.set_attribute(GEN_AI_PROVIDER_NAME, "azure.openai")
-        span.set_attribute(GEN_AI_REQUEST_MODEL, settings.aoai_chat_deployment)
-        span.set_attribute(GEN_AI_OPERATION_NAME, "chat")
-        response = await _call()
-        text = response.choices[0].message.content or ""
-        span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, response.usage.prompt_tokens)
-        span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, response.usage.completion_tokens)
-        span.set_attribute(GEN_AI_RESPONSE_MODEL, response.model)
-        return text, response.model
+        completion = await _call()
+        span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, completion.usage.input_tokens)
+        span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, completion.usage.output_tokens)
+        span.set_attribute(GEN_AI_RESPONSE_MODEL, completion.model)
+        return completion.text, completion.model
 
 
 _SYSTEM_PROMPT = (
