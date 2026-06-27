@@ -1,0 +1,62 @@
+# gitleaks config — enforces the public-repo "no identifying values" standard
+# mechanically (pre-commit + CI), so it can't rely on anyone remembering.
+#
+# Scope: deployable artifacts (k8s manifests, configmaps, app code, workflows,
+# scripts). Committed manifests must carry only __PLACEHOLDERS__; real values
+# are rendered into the git-ignored build/ dir by scripts/render-k8s.sh.
+#
+# Intentionally NOT flagged: the deterministic project resource-group name
+# (`rag-platform-uks`) where it's an IaC variable default / ops teardown
+# target, the shared dev Key Vault name, and the public ingress domain — those
+# are low-sensitivity and need to live in code. The high-value targets are
+# generated resource names, service FQDNs, workload-identity GUIDs, and PII.
+
+title = "rag-retrieval-service secret + identifier denylist"
+
+[extend]
+useDefault = true  # keep gitleaks' built-in secret rules (API keys, tokens, …)
+
+[[rules]]
+id = "azure-service-fqdn"
+description = "Azure service FQDN (AOAI / Postgres / Service Bus) — render via placeholder instead"
+regex = '''[a-z0-9][a-z0-9-]*\.(openai\.azure\.com|postgres\.database\.azure\.com|servicebus\.windows\.net)'''
+tags = ["azure", "identifier"]
+
+[[rules]]
+id = "azure-aoai-generated-name"
+description = "Generated AOAI account name (rag-aoai-uks-<suffix>)"
+regex = '''rag-aoai-uks-[a-z0-9]{4,}'''
+tags = ["azure", "identifier"]
+
+[[rules]]
+id = "azure-storage-account"
+description = "Generated storage account name (ragst<suffix>)"
+regex = '''\bragst[a-z0-9]{6,}\b'''
+tags = ["azure", "identifier"]
+
+[[rules]]
+id = "azure-workload-identity-guid"
+description = "Hardcoded workload-identity client/identity GUID — render via placeholder"
+regex = '''(client-id|identityId):\s*['"]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'''
+tags = ["azure", "identity"]
+
+[[rules]]
+id = "operator-name-as-db-principal"
+description = "Operator's personal name used as a DB user/login/principal (use a workload identity / env var). Package-author metadata is not matched."
+regex = '''(?i)(user|login|principal)['"]?\s*[:=]\s*['"]?Michaela Links'''
+tags = ["pii", "identity"]
+
+[allowlist]
+description = "Paths and values that are intentionally allowed"
+paths = [
+  '''\.venv/''',
+  '''build/''',                # rendered output (git-ignored anyway)
+  '''docs/''',                 # architecture/session docs for human readers
+  '''uv\.lock''',
+  '''\.gitleaks\.toml''',      # this file's own example patterns
+]
+regexes = [
+  '''localdevenv''',                 # shared dev Key Vault name (needed as a code default)
+  '''[a-z0-9-]+\.dev\.michaelalinks\.com''',   # public ingress hostnames
+  '''michaelalinks\.uk\.auth0\.com''',         # public Auth0 tenant (appears in JWTs)
+]

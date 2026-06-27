@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-api
+  namespace: query
+  labels:
+    app: retrieval-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: retrieval-api
+  template:
+    metadata:
+      labels:
+        app: retrieval-api
+        azure.workload.identity/use: 'true'
+    spec:
+      serviceAccountName: retrieval-api
+      containers:
+        - name: retrieval-api
+          image: __ACR_LOGIN_SERVER__/rag-retrieval-api:latest # {"$imagepolicy": "flux-system:rag-retrieval-api"}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: rag-config
+          env:
+            # Principal name rendered into build/ by scripts/render-k8s.sh.
+            - name: PG_USER
+              value: __RETRIEVAL_API_PRINCIPAL_NAME__
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi

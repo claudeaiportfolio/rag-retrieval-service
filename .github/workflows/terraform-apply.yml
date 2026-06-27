@@ -1,0 +1,63 @@
+name: terraform apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply" to confirm.'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    if: ${{ inputs.confirm == 'apply' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      ARM_USE_OIDC: 'true'
+      ARM_USE_AZUREAD: 'true'
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_postgres_aad_admin_object_id: ${{ secrets.PG_AAD_ADMIN_OBJECT_ID }}
+      TF_VAR_postgres_aad_admin_principal_name: ${{ secrets.PG_AAD_ADMIN_PRINCIPAL_NAME }}
+      TF_VAR_postgres_aad_admin_principal_type: ${{ secrets.PG_AAD_ADMIN_PRINCIPAL_TYPE }}
+      TF_VAR_aks_cluster_name: ${{ secrets.AKS_CLUSTER_NAME }}
+      TF_VAR_aks_resource_group: ${{ secrets.AKS_RESOURCE_GROUP }}
+      TF_VAR_postgres_ci_admin_object_id: ${{ secrets.PG_CI_ADMIN_OBJECT_ID }}
+      TF_VAR_postgres_ci_admin_principal_name: ${{ secrets.PG_CI_ADMIN_PRINCIPAL_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.9'
+
+      - run: terraform init -input=false
+
+      - run: terraform plan -input=false -out=tfplan
+
+      - run: terraform apply -input=false -auto-approve tfplan
+
+      - if: success() || failure()
+        run: terraform output -json > tf-outputs.json
+
+      - if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: terraform/tf-outputs.json
+          retention-days: 30

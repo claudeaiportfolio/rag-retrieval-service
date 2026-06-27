@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upload-api
+  namespace: ingestion
+  labels:
+    app: upload-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: upload-api
+  template:
+    metadata:
+      labels:
+        app: upload-api
+        azure.workload.identity/use: 'true'
+    spec:
+      serviceAccountName: upload-api
+      containers:
+        - name: upload-api
+          image: __ACR_LOGIN_SERVER__/rag-upload-api:latest # {"$imagepolicy": "flux-system:rag-upload-api"}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: rag-config
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

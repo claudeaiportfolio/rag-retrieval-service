@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+  namespace: query
+data:
+  # Placeholders only — rendered from terraform outputs into build/ by
+  # scripts/render-k8s.sh. See k8s/ingestion/configmap.yaml.
+  KEY_VAULT_URL: 'https://localdevenv.vault.azure.net/'
+  AOAI_ENDPOINT: __AOAI_ENDPOINT__
+  AOAI_EMBEDDING_DEPLOYMENT: 'embedding'
+  AOAI_CHAT_DEPLOYMENT: 'chat'
+  PG_HOST: __PG_PRIMARY_FQDN__
+  PG_REPLICA_HOST: __PG_REPLICA_FQDN__
+  PG_DATABASE: 'rag'
+  # PG_USER overridden per-pod via deployment env (workload-identity principal).
+  GENERATION_BACKEND: 'aoai'
+  RETRIEVAL_TOP_K: '8'
+  INDEX_TYPE: 'hnsw'
+  UPLOAD_API_URL: 'http://upload-api.ingestion.svc.cluster.local:8080'
+  RETRIEVAL_API_URL: 'http://retrieval-api.query.svc.cluster.local:8080'
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'otel-collector.otel.svc.cluster.local:4317'
+  LOG_LEVEL: 'INFO'

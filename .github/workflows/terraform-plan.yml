@@ -1,0 +1,87 @@
+name: terraform plan
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-plan.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      ARM_USE_OIDC: 'true'
+      ARM_USE_AZUREAD: 'true'
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_postgres_aad_admin_object_id: ${{ secrets.PG_AAD_ADMIN_OBJECT_ID }}
+      TF_VAR_postgres_aad_admin_principal_name: ${{ secrets.PG_AAD_ADMIN_PRINCIPAL_NAME }}
+      TF_VAR_postgres_aad_admin_principal_type: ${{ secrets.PG_AAD_ADMIN_PRINCIPAL_TYPE }}
+      TF_VAR_aks_cluster_name: ${{ secrets.AKS_CLUSTER_NAME }}
+      TF_VAR_aks_resource_group: ${{ secrets.AKS_RESOURCE_GROUP }}
+      TF_VAR_postgres_ci_admin_object_id: ${{ secrets.PG_CI_ADMIN_OBJECT_ID }}
+      TF_VAR_postgres_ci_admin_principal_name: ${{ secrets.PG_CI_ADMIN_PRINCIPAL_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.9'
+
+      - run: terraform fmt -check -recursive
+
+      - run: terraform init -input=false
+
+      - run: terraform validate
+
+      - id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/plan.txt', 'utf8');
+            const body = [
+              '### Terraform plan',
+              '```',
+              plan.slice(-60000),
+              '```',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+      - if: steps.plan.outputs.exit != '0'
+        run: exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+          retention-days: 14

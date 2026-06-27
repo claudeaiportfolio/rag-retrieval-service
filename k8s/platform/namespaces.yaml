@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingestion
+  labels:
+    rag.platform: ingestion
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: query
+  labels:
+    rag.platform: query
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag-platform
+  labels:
+    rag.platform: shared

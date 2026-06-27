@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-worker
+  namespace: ingestion
+  labels:
+    app: embedding-worker
+spec:
+  replicas: 0 # KEDA owns scale; managed via ScaledObject
+  selector:
+    matchLabels:
+      app: embedding-worker
+  template:
+    metadata:
+      labels:
+        app: embedding-worker
+        azure.workload.identity/use: 'true'
+    spec:
+      serviceAccountName: embedding-worker
+      # Spot affinity removed until LowPriorityCores quota in uksouth is
+      # raised (currently 3 cores; D4ds_v5 needs 4). Restore the
+      # nodeSelector + tolerations from k8s/ingestion/spot-affinity.patch
+      # once the quota lands, or drop the spot pool's vm_size to 2 cores.
+      containers:
+        - name: embedding-worker
+          image: __ACR_LOGIN_SERVER__/rag-embedding-worker:latest # {"$imagepolicy": "flux-system:rag-embedding-worker"}
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: rag-config
+          env:
+            # Pod auths as its own workload-identity UAMI. Principal name rendered
+            # into build/ from terraform output by scripts/render-k8s.sh.
+            - name: PG_USER
+              value: __EMBEDDING_WORKER_PRINCIPAL_NAME__
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 2Gi

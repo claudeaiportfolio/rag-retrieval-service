@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-api
+  namespace: query
+spec:
+  type: ClusterIP
+  selector:
+    app: retrieval-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: query
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
