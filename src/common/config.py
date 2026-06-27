@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     # over this half-life in days). 0 disables it (pure RRF/rerank ordering).
     freshness_half_life_days: float = 0.0
 
+    # --- Context assembly (what actually goes in the LLM window) ---
+    # top_k_by_fused | rerank_then_top_k | rerank_then_compress (see assembly.py).
+    assembly_policy: Literal[
+        "top_k_by_fused", "rerank_then_top_k", "rerank_then_compress"
+    ] = "rerank_then_top_k"
+    # Token budget for the assembled context (the knapsack capacity).
+    context_token_budget: int = 4000
+    # Per-chunk cap when the policy compresses (rerank_then_compress).
+    compress_per_chunk_tokens: int = 200
+
     auth0_domain: str = ""
     auth0_audience: str = "https://rag.dev.michaelalinks.com"
 

@@ -1,6 +1,6 @@
 .PHONY: tf-init tf-fmt tf-validate tf-plan tf-apply tf-destroy \
         tf-auth0-init tf-auth0-plan tf-auth0-apply \
-        render-k8s test lint typecheck secret-scan ingest eval eval-rerank \
+        render-k8s test lint typecheck secret-scan ingest eval eval-rerank eval-assembly \
         experiment smoke cluster-start cluster-stop teardown teardown-full
 
 # AzureAD-backed remote state. The provider itself uses az CLI auth
@@ -64,6 +64,10 @@ eval:
 # Headline retrieval-quality artefact: recall@k + p50/p95 with rerank ON vs OFF.
 eval-rerank:
 	uv run python -m evals.rerank_delta
+
+# Context-engineering artefact: policy × (accuracy, tokens, latency) table.
+eval-assembly:
+	uv run python -m evals.assembly_table
 
 experiment:
 	uv run python scripts/experiments/keda_burst.py

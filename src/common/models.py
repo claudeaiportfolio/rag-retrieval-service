@@ -46,6 +46,11 @@ class QueryRequest(BaseModel):
     # rerank ON/OFF eval drives these to measure the recall@k and p95 delta.
     hybrid: bool | None = None
     rerank: bool | None = None
+    # Context-assembly policy override (top_k_by_fused | rerank_then_top_k |
+    # rerank_then_compress). None = service default. Drives the assembly table.
+    assembly_policy: Literal[
+        "top_k_by_fused", "rerank_then_top_k", "rerank_then_compress"
+    ] | None = None
     # NB: the ANN index (HNSW vs IVFFlat) is a property of the `chunks` table,
     # not something a single query can switch — pgvector picks the index for the
     # `<=>` operator automatically. The configured index lives in
@@ -67,3 +72,8 @@ class QueryResponse(BaseModel):
     chunks: list[RetrievedChunk]
     model: str
     backend: Literal["aoai", "anthropic"]
+    # Assembly observability — the inputs to the policy × (accuracy, tokens,
+    # latency) table.
+    assembly_policy: str = "rerank_then_top_k"
+    context_tokens: int = 0
+    chunks_used: int = 0

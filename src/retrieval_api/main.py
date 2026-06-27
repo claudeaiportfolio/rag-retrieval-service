@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
+from common.assembly import assemble
 from common.config import load_secrets, settings
 from common.db import create_pool
 from common.embeddings import embed_batch
@@ -70,10 +71,14 @@ async def query(req: QueryRequest) -> QueryResponse:
         span.set_attribute(RAG_RETRIEVAL_TOP_K, req.top_k)
         # The active ANN index is fixed by the schema, not the request.
         span.set_attribute(RAG_INDEX_TYPE, settings.index_type)
+        policy = req.assembly_policy or settings.assembly_policy
         hybrid = settings.hybrid_enabled if req.hybrid is None else req.hybrid
-        rerank_on = settings.rerank_enabled if req.rerank is None else req.rerank
+        # The assembly policy governs whether rerank runs: top_k_by_fused skips
+        # it, the rerank_* policies require it (an explicit request flag wins).
+        rerank_on = req.rerank if req.rerank is not None else (policy != "top_k_by_fused")
         span.set_attribute("rag.retrieval.hybrid", hybrid)
         span.set_attribute("rag.retrieval.rerank", rerank_on)
+        span.set_attribute("rag.assembly.policy", policy)
 
         embeddings = await embed_batch([req.query])
         qvec = str(embeddings[0])
@@ -103,14 +108,24 @@ async def query(req: QueryRequest) -> QueryResponse:
         ]
         span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
 
-        context = "\n\n".join(
-            f"[{c.source_doc} :: {c.heading_path}]\n{c.text}" for c in chunks
+        assembled = assemble(
+            candidates,
+            policy=policy,
+            token_budget=settings.context_token_budget,
+            query=req.query,
+            compress_per_chunk_tokens=settings.compress_per_chunk_tokens,
         )
-        answer_text, model = await answer(req.query, context)
+        span.set_attribute("rag.assembly.tokens", assembled.tokens)
+        span.set_attribute("rag.assembly.chunks_used", assembled.chunks_used)
+
+        answer_text, model = await answer(req.query, assembled.context)
 
         return QueryResponse(
             answer=answer_text,
             chunks=chunks,
             model=model,
             backend=settings.generation_backend,
+            assembly_policy=policy,
+            context_tokens=assembled.tokens,
+            chunks_used=assembled.chunks_used,
         )
