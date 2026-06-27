@@ -13,8 +13,7 @@ Full design in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Built and proven live — ingestion → KEDA scale-to-zero → retrieval → eval, end to
 end on AKS. The queue is **Redis/RQ** (migrated from Service Bus); both single-shot
 and **agentic** RAG paths are exposed via MCP. See the final quality re-grade in
-[`docs/SCORECARD.md`](docs/SCORECARD.md), measured eval results in
-[`EVAL_FINDINGS.md`](EVAL_FINDINGS.md), and the SOC 2 / ISO 27001 control mapping in
+[`docs/SCORECARD.md`](docs/SCORECARD.md) and the SOC 2 / ISO 27001 control mapping in
 [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md).
 
 ## Layout

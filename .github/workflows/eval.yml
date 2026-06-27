@@ -7,14 +7,10 @@ on:
         description: 'Re-ingest the corpus before scoring (default false).'
         type: boolean
         default: false
-      include_judge:
-        description: 'Also run the agent-evals LLM-judge single-shot-vs-agentic comparison (Anthropic-billed).'
-        type: boolean
-        default: false
 
 permissions:
   id-token: write
-  contents: write  # to commit EVAL_FINDINGS.md updates
+  contents: read
 
 jobs:
   eval:
@@ -41,13 +37,6 @@ jobs:
         env:
           RETRIEVAL_API_URL: https://retrieve.rag.dev.michaelalinks.com
           EVAL_TENANT_ID: evals
-
-      - if: ${{ inputs.include_judge }}
-        run: uv run python -m evals.compare
-        env:
-          RETRIEVAL_API_URL: https://retrieve.rag.dev.michaelalinks.com
-          EVAL_TENANT_ID: evals
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - uses: actions/upload-artifact@v4
         with:
