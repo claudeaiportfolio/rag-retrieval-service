@@ -5,14 +5,21 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
 from common.assembly import assemble
+from common.auth import require_scope
 from common.config import load_secrets, settings
 from common.db import create_pool
 from common.embeddings import embed_batch
 from common.llm import answer
-from common.models import QueryRequest, QueryResponse, RetrievedChunk
+from common.models import (
+    QueryRequest,
+    QueryResponse,
+    RetrievedChunk,
+    SearchRequest,
+    SearchResponse,
+)
 from common.retrieval import retrieve
 from common.otel import (
     RAG_INDEX_TYPE,
@@ -64,8 +71,13 @@ async def readyz() -> dict[str, str]:
     return {"status": "ready"}
 
 
-@app.post("/query", response_model=QueryResponse)
-async def query(req: QueryRequest) -> QueryResponse:
+@app.post("/v1/answer", response_model=QueryResponse)
+async def answer_query(
+    req: QueryRequest,
+    _claims: dict = Depends(require_scope("query:read")),
+) -> QueryResponse:
+    """Retrieve, assemble the context under the policy, and generate a grounded,
+    cited answer. The surface a human-built app (a compliance dashboard) calls."""
     with tracer.start_as_current_span("rag_query") as span:
         span.set_attribute(RAG_TENANT_ID, req.tenant_id)
         span.set_attribute(RAG_RETRIEVAL_TOP_K, req.top_k)
@@ -129,3 +141,56 @@ async def query(req: QueryRequest) -> QueryResponse:
             context_tokens=assembled.tokens,
             chunks_used=assembled.chunks_used,
         )
+
+
+@app.post("/query", response_model=QueryResponse, deprecated=True)
+async def query_alias(
+    req: QueryRequest,
+    claims: dict = Depends(require_scope("query:read")),
+) -> QueryResponse:
+    """Deprecated alias for POST /v1/answer; kept so existing callers don't break."""
+    return await answer_query(req, claims)
+
+
+@app.post("/v1/search", response_model=SearchResponse)
+async def search(
+    req: SearchRequest,
+    _claims: dict = Depends(require_scope("query:read")),
+) -> SearchResponse:
+    """Retrieval only — hybrid + rerank, no answer generation. The surface an
+    agent calls to get evidence to reason over (vs /v1/answer for apps)."""
+    with tracer.start_as_current_span("rag_search") as span:
+        span.set_attribute(RAG_TENANT_ID, req.tenant_id)
+        span.set_attribute(RAG_RETRIEVAL_TOP_K, req.top_k)
+        span.set_attribute(RAG_INDEX_TYPE, settings.index_type)
+        hybrid = settings.hybrid_enabled if req.hybrid is None else req.hybrid
+        rerank_on = settings.rerank_enabled if req.rerank is None else req.rerank
+        span.set_attribute("rag.retrieval.hybrid", hybrid)
+        span.set_attribute("rag.retrieval.rerank", rerank_on)
+
+        embeddings = await embed_batch([req.query])
+        qvec = str(embeddings[0])
+        async with app.state.pool.acquire() as conn:
+            candidates = await retrieve(
+                conn,
+                query=req.query,
+                qvec=qvec,
+                tenant=req.tenant_id,
+                top_k=req.top_k,
+                hybrid=hybrid,
+                rerank_on=rerank_on,
+            )
+        chunks = [
+            RetrievedChunk(
+                document_id=c.document_id,
+                source_doc=c.source_doc,
+                heading_path=c.heading_path,
+                chunk_index=c.chunk_index,
+                text=c.text,
+                score=c.score,
+                created_at=c.created_at,
+            )
+            for c in candidates
+        ]
+        span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
+        return SearchResponse(chunks=chunks, hybrid=hybrid, rerank=rerank_on)
