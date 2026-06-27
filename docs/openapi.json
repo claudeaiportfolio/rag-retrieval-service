@@ -1,0 +1,517 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "rag-retrieval-service \u00b7 retrieval-api",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "description": "Liveness: the process is up. Cheap, never touches dependencies.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readyz",
+        "description": "Readiness: can we actually serve a query? Proves the DB pool is live.\n\nA failing readiness pulls the pod out of the Service endpoints without\nkilling it (that's liveness's job), so a transient DB blip stops traffic\nrather than triggering a restart loop.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Readyz Readyz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/answer": {
+      "post": {
+        "summary": "Answer Query",
+        "description": "Retrieve, assemble the context under the policy, and generate a grounded,\ncited answer. The surface a human-built app (a compliance dashboard) calls.",
+        "operationId": "answer_query_v1_answer_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/query": {
+      "post": {
+        "summary": "Query Alias",
+        "description": "Deprecated alias for POST /v1/answer; kept so existing callers don't break.",
+        "operationId": "query_alias_query_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/search": {
+      "post": {
+        "summary": "Search",
+        "description": "Retrieval only \u2014 hybrid + rerank, no answer generation. The surface an\nagent calls to get evidence to reason over (vs /v1/answer for apps).",
+        "operationId": "search_v1_search_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "QueryRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id",
+            "default": "default"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K",
+            "default": 8
+          },
+          "hybrid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hybrid"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          },
+          "assembly_policy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "top_k_by_fused",
+                  "rerank_then_top_k",
+                  "rerank_then_compress"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Policy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "QueryRequest"
+      },
+      "QueryResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedChunk"
+            },
+            "type": "array",
+            "title": "Chunks"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "aoai",
+              "anthropic"
+            ],
+            "title": "Backend"
+          },
+          "assembly_policy": {
+            "type": "string",
+            "title": "Assembly Policy",
+            "default": "rerank_then_top_k"
+          },
+          "context_tokens": {
+            "type": "integer",
+            "title": "Context Tokens",
+            "default": 0
+          },
+          "chunks_used": {
+            "type": "integer",
+            "title": "Chunks Used",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "chunks",
+          "model",
+          "backend"
+        ],
+        "title": "QueryResponse"
+      },
+      "RetrievedChunk": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "source_doc": {
+            "type": "string",
+            "title": "Source Doc"
+          },
+          "heading_path": {
+            "type": "string",
+            "title": "Heading Path"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "source_doc",
+          "heading_path",
+          "chunk_index",
+          "text",
+          "score"
+        ],
+        "title": "RetrievedChunk"
+      },
+      "SearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id",
+            "default": "default"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K",
+            "default": 8
+          },
+          "hybrid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hybrid"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "description": "POST /v1/search \u2014 retrieval only, no answer generation. The interface an\nagent (e.g. piece 2's diligence agent) calls to get evidence to reason over."
+      },
+      "SearchResponse": {
+        "properties": {
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedChunk"
+            },
+            "type": "array",
+            "title": "Chunks"
+          },
+          "hybrid": {
+            "type": "boolean",
+            "title": "Hybrid"
+          },
+          "rerank": {
+            "type": "boolean",
+            "title": "Rerank"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunks",
+          "hybrid",
+          "rerank"
+        ],
+        "title": "SearchResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

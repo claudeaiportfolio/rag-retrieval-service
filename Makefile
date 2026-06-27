@@ -1,6 +1,6 @@
 .PHONY: tf-init tf-fmt tf-validate tf-plan tf-apply tf-destroy \
         tf-auth0-init tf-auth0-plan tf-auth0-apply \
-        render-k8s test lint typecheck secret-scan ingest eval eval-rerank eval-assembly \
+        render-k8s test lint typecheck secret-scan ingest eval eval-rerank eval-assembly openapi \
         experiment smoke cluster-start cluster-stop teardown teardown-full
 
 # AzureAD-backed remote state. The provider itself uses az CLI auth
@@ -42,6 +42,10 @@ tf-auth0-apply:
 
 render-k8s:
 	bash scripts/render-k8s.sh
+
+# Publish the HTTP API contract (committed at docs/openapi.json).
+openapi:
+	uv run python scripts/export_openapi.py
 
 test:
 	uv run pytest tests/unit -q

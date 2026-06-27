@@ -64,7 +64,7 @@ def _percentile(values: list[float], p: float) -> float:
 async def _query(client: httpx.AsyncClient, fixture: Fixture, policy: str) -> Sample:
     start = time.perf_counter()
     response = await client.post(
-        f"{RETRIEVAL_API_URL}/query",
+        f"{RETRIEVAL_API_URL}/v1/answer",
         json={
             "query": fixture.query,
             "tenant_id": TENANT_ID,

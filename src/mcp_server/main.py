@@ -2,7 +2,8 @@
 
 Tools:
   - ingest_document(content, source_doc, tenant_id?) → document_id
-  - query_knowledge(query, tenant_id?, top_k?) → {answer, chunks}  (single-shot)
+  - query_knowledge(query, tenant_id?, top_k?) → {answer, chunks}  (composed answer)
+  - search_knowledge(query, tenant_id?, top_k?) → {chunks}  (retrieval only, for agents)
 
 Authentication is enforced by `src/mcp_server/auth.py` (Auth0 JWT).
 """
@@ -18,7 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from common.config import load_secrets
-from common.models import IngestRequest, QueryRequest
+from common.models import IngestRequest, QueryRequest, SearchRequest
 from common.otel import MCP_METHOD_NAME, get_tracer, setup_telemetry
 from mcp_server.auth import AuthError, authorize
 
@@ -101,8 +102,37 @@ async def query_knowledge(
             raise ValueError(f"unauthorized: {exc}") from exc
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                f"{RETRIEVAL_API}/query",
+                f"{RETRIEVAL_API}/v1/answer",
                 json=QueryRequest(query=query, tenant_id=tenant_id, top_k=top_k).model_dump(),
+            )
+            response.raise_for_status()
+            return response.json()
+
+
+@mcp.tool()
+async def search_knowledge(
+    query: str,
+    tenant_id: str = "default",
+    top_k: int = 8,
+    ctx: Context | None = None,
+) -> dict:
+    """Retrieve relevant chunks (hybrid + rerank) WITHOUT generating an answer.
+
+    Use this to get evidence to reason over yourself; use query_knowledge for a
+    composed, cited answer. This is the agent-facing half of "one service, the
+    right interface per consumer".
+    """
+    with tracer.start_as_current_span("mcp.search_knowledge") as span:
+        span.set_attribute(MCP_METHOD_NAME, "search_knowledge")
+        try:
+            await authorize(_bearer(ctx), "search_knowledge")
+        except AuthError as exc:
+            span.set_attribute("rag.auth.denied", True)
+            raise ValueError(f"unauthorized: {exc}") from exc
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                f"{RETRIEVAL_API}/v1/search",
+                json=SearchRequest(query=query, tenant_id=tenant_id, top_k=top_k).model_dump(),
             )
             response.raise_for_status()
             return response.json()

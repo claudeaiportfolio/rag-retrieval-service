@@ -77,3 +77,20 @@ class QueryResponse(BaseModel):
     assembly_policy: str = "rerank_then_top_k"
     context_tokens: int = 0
     chunks_used: int = 0
+
+
+class SearchRequest(BaseModel):
+    """POST /v1/search — retrieval only, no answer generation. The interface an
+    agent (e.g. piece 2's diligence agent) calls to get evidence to reason over."""
+
+    query: str
+    tenant_id: str = "default"
+    top_k: int = 8
+    hybrid: bool | None = None
+    rerank: bool | None = None
+
+
+class SearchResponse(BaseModel):
+    chunks: list[RetrievedChunk]
+    hybrid: bool
+    rerank: bool

@@ -42,7 +42,7 @@ class Result:
 
 async def score_one(client: httpx.AsyncClient, fixture: Fixture) -> Result:
     response = await client.post(
-        f"{RETRIEVAL_API_URL}/query",
+        f"{RETRIEVAL_API_URL}/v1/answer",
         json={"query": fixture.query, "tenant_id": TENANT_ID, "top_k": max(TOP_KS)},
         timeout=60,
     )

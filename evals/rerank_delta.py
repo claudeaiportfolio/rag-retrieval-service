@@ -43,7 +43,7 @@ class Fixture:
 async def _query(client: httpx.AsyncClient, fixture: Fixture, rerank: bool) -> tuple[dict, float]:
     start = time.perf_counter()
     response = await client.post(
-        f"{RETRIEVAL_API_URL}/query",
+        f"{RETRIEVAL_API_URL}/v1/answer",
         json={
             "query": fixture.query,
             "tenant_id": TENANT_ID,
