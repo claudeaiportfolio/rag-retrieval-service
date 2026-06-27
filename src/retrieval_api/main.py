@@ -12,6 +12,7 @@ from common.db import create_pool
 from common.embeddings import embed_batch
 from common.llm import answer
 from common.models import QueryRequest, QueryResponse, RetrievedChunk
+from common.retrieval import retrieve
 from common.otel import (
     RAG_INDEX_TYPE,
     RAG_RETRIEVAL_SCORES,
@@ -69,36 +70,36 @@ async def query(req: QueryRequest) -> QueryResponse:
         span.set_attribute(RAG_RETRIEVAL_TOP_K, req.top_k)
         # The active ANN index is fixed by the schema, not the request.
         span.set_attribute(RAG_INDEX_TYPE, settings.index_type)
+        hybrid = settings.hybrid_enabled if req.hybrid is None else req.hybrid
+        rerank_on = settings.rerank_enabled if req.rerank is None else req.rerank
+        span.set_attribute("rag.retrieval.hybrid", hybrid)
+        span.set_attribute("rag.retrieval.rerank", rerank_on)
 
         embeddings = await embed_batch([req.query])
-        qvec = embeddings[0]
+        qvec = str(embeddings[0])
 
-        pool = app.state.pool
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT document_id, source_doc, heading_path, chunk_index, text,
-                       1 - (embedding <=> $1::vector) AS score
-                FROM chunks
-                WHERE tenant_id = $2
-                ORDER BY embedding <=> $1::vector
-                LIMIT $3
-                """,
-                str(qvec),
-                req.tenant_id,
-                req.top_k,
+        async with app.state.pool.acquire() as conn:
+            candidates = await retrieve(
+                conn,
+                query=req.query,
+                qvec=qvec,
+                tenant=req.tenant_id,
+                top_k=req.top_k,
+                hybrid=hybrid,
+                rerank_on=rerank_on,
             )
 
         chunks = [
             RetrievedChunk(
-                document_id=r["document_id"],
-                source_doc=r["source_doc"],
-                heading_path=r["heading_path"],
-                chunk_index=r["chunk_index"],
-                text=r["text"],
-                score=float(r["score"]),
+                document_id=c.document_id,
+                source_doc=c.source_doc,
+                heading_path=c.heading_path,
+                chunk_index=c.chunk_index,
+                text=c.text,
+                score=c.score,
+                created_at=c.created_at,
             )
-            for r in rows
+            for c in candidates
         ]
         span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
 

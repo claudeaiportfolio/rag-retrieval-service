@@ -9,20 +9,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "agent-core"
-version = "0.1.2"
-source = { git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=agent-core&rev=agent-core-v0.1.2#d175a01db8e6f2499cff26cfb59d558ddaa9beb7" }
-dependencies = [
-    { name = "anthropic" },
-    { name = "httpx" },
-    { name = "mcp" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-instrumentation-httpx" },
-    { name = "opentelemetry-instrumentation-logging" },
-    { name = "opentelemetry-sdk" },
-]
-
-[[package]]
 name = "agent-evals"
 version = "0.2.0"
 source = { git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=agent-evals&rev=agent-evals-v0.2.0#728b328b3b56be8d4a5e7d6d9a4fbaf07db9ebdf" }
@@ -991,6 +977,16 @@ wheels = [
 ]
 
 [[package]]
+name = "llm-provider"
+version = "0.1.0"
+source = { git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=llm-provider&rev=llm-provider-v0.1.0#b179b2c547003b4276bc2fc0249674c25cd7137e" }
+dependencies = [
+    { name = "anthropic" },
+    { name = "openai" },
+    { name = "pydantic" },
+]
+
+[[package]]
 name = "mcp"
 version = "1.27.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1814,11 +1810,10 @@ wheels = [
 ]
 
 [[package]]
-name = "rag-ingestion-platform"
+name = "rag-retrieval-service"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "agent-core" },
     { name = "aiohttp" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -1827,6 +1822,7 @@ dependencies = [
     { name = "azure-storage-blob" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "llm-provider" },
     { name = "mcp" },
     { name = "openai" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
@@ -1854,7 +1850,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-core", git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=agent-core&rev=agent-core-v0.1.2" },
     { name = "agent-evals", extras = ["judge"], marker = "extra == 'dev'", git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=agent-evals&rev=agent-evals-v0.2.0" },
     { name = "aiohttp", specifier = ">=3.10" },
     { name = "anthropic", specifier = ">=0.40" },
@@ -1864,6 +1859,7 @@ requires-dist = [
     { name = "azure-storage-blob", specifier = ">=12.24" },
     { name = "fastapi", specifier = ">=0.136.1" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "llm-provider", git = "https://github.com/claudeaiportfolio/ai-infra-templates.git?subdirectory=llm-provider&rev=llm-provider-v0.1.0" },
     { name = "mcp", specifier = ">=1.27.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "openai", specifier = ">=1.110" },

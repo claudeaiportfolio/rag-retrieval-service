@@ -41,6 +41,11 @@ class QueryRequest(BaseModel):
     query: str
     tenant_id: str = "default"
     top_k: int = 8
+    # Per-request overrides of the configured retrieval mode. None = use the
+    # service default (settings.hybrid_enabled / settings.rerank_enabled). The
+    # rerank ON/OFF eval drives these to measure the recall@k and p95 delta.
+    hybrid: bool | None = None
+    rerank: bool | None = None
     # NB: the ANN index (HNSW vs IVFFlat) is a property of the `chunks` table,
     # not something a single query can switch — pgvector picks the index for the
     # `<=>` operator automatically. The configured index lives in
@@ -54,6 +59,7 @@ class RetrievedChunk(BaseModel):
     chunk_index: int
     text: str
     score: float
+    created_at: datetime | None = None  # freshness signal (ingest timestamp)
 
 
 class QueryResponse(BaseModel):

@@ -10,6 +10,7 @@ beyond that, RQ's bounded `Retry` set at enqueue time.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any
 
@@ -111,15 +112,19 @@ async def _insert_chunks(pool: Any, chunks: Any, embeddings: Any) -> None:
             c.token_count,
             c.text,
             str(emb),
+            hashlib.sha256(c.text.encode("utf-8")).hexdigest(),
         )
         for c, emb in zip(chunks, embeddings, strict=True)
     ]
+    # ON CONFLICT DO NOTHING dedups on (tenant_id, content_hash): re-ingesting the
+    # same chunk text is a no-op rather than a duplicate that corrupts retrieval.
     async with pool.acquire() as conn:
         await conn.executemany(
             """
             INSERT INTO chunks (document_id, tenant_id, source_doc, heading_path,
-                                chunk_index, token_count, text, embedding)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
+                                chunk_index, token_count, text, embedding, content_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9)
+            ON CONFLICT (tenant_id, content_hash) DO NOTHING
             """,
             rows,
         )
