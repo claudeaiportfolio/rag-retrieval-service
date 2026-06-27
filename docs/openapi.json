@@ -339,6 +339,13 @@
             "type": "integer",
             "title": "Chunks Used",
             "default": 0
+          },
+          "timings_ms": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Timings Ms"
           }
         },
         "type": "object",

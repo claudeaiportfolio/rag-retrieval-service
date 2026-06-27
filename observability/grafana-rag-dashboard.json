@@ -1,0 +1,51 @@
+{
+  "title": "RAG Retrieval Service",
+  "uid": "rag-retrieval",
+  "tags": ["rag", "retrieval", "piece-1"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Retrieval latency p50/p95/p99 (rag_query span)",
+      "type": "timeseries",
+      "description": "End-to-end /v1/answer latency from the OTel spanmetrics connector. The per-stage attribution (embed/retrieve/rerank/generate) is the committed load-test PNG; this is the live production view.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_name=\"rag_query\"}[5m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_name=\"rag_query\"}[5m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_name=\"rag_query\"}[5m])))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 2,
+      "title": "Token cost per query (gen_ai.usage.*)",
+      "type": "timeseries",
+      "description": "Input + output tokens on the answer-generation span, summed per minute. Multiply by the model's $/token for the FinOps view a platform buyer cares about.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(gen_ai_client_token_usage_sum{gen_ai_token_type=\"input\"}[5m]))", "legendFormat": "input tokens/s" },
+        { "refId": "B", "expr": "sum(rate(gen_ai_client_token_usage_sum{gen_ai_token_type=\"output\"}[5m]))", "legendFormat": "output tokens/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 3,
+      "title": "KEDA autoscale: queue depth vs embedding workers",
+      "type": "timeseries",
+      "description": "The 0->10->0 story: Redis queue depth (LLEN) driving embedding-worker replicas. The committed autoscale curve comes from scripts/experiments/keda_burst.py.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "redis_list_length{list=\"embed-jobs\"}", "legendFormat": "queue depth" },
+        { "refId": "B", "expr": "kube_deployment_status_replicas{deployment=\"embedding-worker\"}", "legendFormat": "worker replicas" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ]
+}

@@ -5,6 +5,7 @@ resources:
   - serviceaccount.yaml
   - configmap.yaml
   - deployment-retrieval-api.yaml
+  - deployment-reranker.yaml
   - deployment-mcp-server.yaml
   - service.yaml
   - httproute.yaml

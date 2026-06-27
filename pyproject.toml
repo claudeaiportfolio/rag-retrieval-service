@@ -53,6 +53,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.13",
     "mypy>=1.11",
+    "matplotlib>=3.9",  # load-test + autoscale artefact plots
     # Eval harness (evals/ only — not shipped in the app images).
     "agent-evals[judge] @ git+https://github.com/claudeaiportfolio/ai-infra-templates.git@agent-evals-v0.2.0#subdirectory=agent-evals",
 ]

@@ -77,6 +77,10 @@ class QueryResponse(BaseModel):
     assembly_policy: str = "rerank_then_top_k"
     context_tokens: int = 0
     chunks_used: int = 0
+    # Per-stage wall-clock (ms): embed / retrieve / assemble / generate. The
+    # "where does the latency go" attribution the load test aggregates into
+    # per-stage p50/p95/p99.
+    timings_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class SearchRequest(BaseModel):
