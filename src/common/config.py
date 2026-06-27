@@ -45,6 +45,23 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 8
     index_type: Literal["hnsw", "ivfflat"] = "hnsw"
 
+    # --- Hybrid retrieval + rerank ---
+    # Hybrid = BM25 (Postgres FTS) + vector (pgvector HNSW), fused with RRF.
+    hybrid_enabled: bool = True
+    # candidates pulled from EACH retriever before fusion/rerank.
+    candidate_k: int = 40
+    # RRF constant: score = sum 1/(rrf_k + rank). 60 is the canonical default;
+    # large enough that no single retriever's top rank dominates the fusion.
+    rrf_k: int = 60
+    # Cross-encoder reranker (served as a warm pod, TEI-compatible /rerank).
+    # Off by default so the stack runs without a reranker in dev/CI; the
+    # rerank ON/OFF eval flips this against a live reranker pod.
+    rerank_enabled: bool = False
+    reranker_url: str = ""
+    # Freshness tiebreak: when >0, newer chunks get a small RRF boost (decays
+    # over this half-life in days). 0 disables it (pure RRF/rerank ordering).
+    freshness_half_life_days: float = 0.0
+
     auth0_domain: str = ""
     auth0_audience: str = "https://rag.dev.michaelalinks.com"
 

@@ -17,6 +17,14 @@ data:
   GENERATION_BACKEND: 'aoai'
   RETRIEVAL_TOP_K: '8'
   INDEX_TYPE: 'hnsw'
+  # Hybrid (BM25 + vector, RRF) + cross-encoder rerank. The reranker is a warm
+  # in-cluster pod; the rerank ON/OFF eval flips `rerank` per request to measure
+  # the recall@k / p95 delta against this production-on default.
+  HYBRID_ENABLED: 'true'
+  RERANK_ENABLED: 'true'
+  RERANKER_URL: 'http://reranker.query.svc.cluster.local'
+  CANDIDATE_K: '40'
+  RRF_K: '60'
   UPLOAD_API_URL: 'http://upload-api.ingestion.svc.cluster.local:8080'
   RETRIEVAL_API_URL: 'http://retrieval-api.query.svc.cluster.local:8080'
   OTEL_EXPORTER_OTLP_ENDPOINT: 'otel-collector.otel.svc.cluster.local:4317'
