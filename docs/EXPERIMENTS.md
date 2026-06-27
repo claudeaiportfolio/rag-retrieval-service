@@ -6,9 +6,9 @@ captures its data as artifact `out/<experiment>/{timeline.csv,summary.md,replica
 
 ## 1. KEDA 0 → N → 0 (`keda-burst`)
 
-**What it shows.** Embedding worker pool scales from 0 to N on Service Bus
-queue depth, drains the queue, then idles back to 0 — without a human in
-the loop.
+**What it shows.** Embedding worker pool scales from 0 to N on Redis (RQ)
+queue depth (`LLEN`), drains the queue, then idles back to 0 — without a human
+in the loop.
 
 **Run.**
 

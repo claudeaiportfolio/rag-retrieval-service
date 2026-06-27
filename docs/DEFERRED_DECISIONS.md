@@ -25,7 +25,7 @@ annotation flavour my Argo Application targets. v1 ships `:latest` +
 to a specific digest in production.
 
 **Effort.** One `ImageUpdater` CR per service in
-`flux/installs/rag-ingestion-platform/`, plus an `argocd-image-updater`
+`flux/installs/rag-retrieval-service/`, plus an `argocd-image-updater`
 ServiceAccount with read access to ACR via workload identity.
 
 ## Experiments 2-5

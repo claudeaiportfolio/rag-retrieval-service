@@ -33,7 +33,7 @@ variable "aks_node_resource_group_override" {
 }
 
 variable "enable_private_endpoints" {
-  description = "Toggle private endpoints + private DNS for Postgres, Service Bus, Storage, AOAI. Off by default to keep dev cost low."
+  description = "Toggle private endpoints + private DNS for Postgres, Storage, AOAI. Off by default to keep dev cost low."
   type        = bool
   default     = false
 }
@@ -100,7 +100,7 @@ variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)
   default = {
-    project = "rag-ingestion-platform"
+    project = "rag-retrieval-service"
     tier    = "portfolio"
     iac     = "terraform"
   }

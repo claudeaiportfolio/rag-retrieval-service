@@ -16,7 +16,7 @@ terraform {
     resource_group_name  = "claudeaiportfolio"
     storage_account_name = "localtfsa"
     container_name       = "tfstate"
-    key                  = "rag-ingestion-platform.tfstate"
+    key                  = "rag-retrieval-service.tfstate"
     use_azuread_auth     = true
   }
 }

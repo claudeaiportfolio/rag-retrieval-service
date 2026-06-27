@@ -1,7 +1,7 @@
 """KEDA 0→N→0 burst experiment.
 
 Floods upload-api with the corpus a few times in quick succession to back the
-Service Bus queue up, then samples the embedding-worker replica count over
+Redis (RQ) queue up, then samples the embedding-worker replica count over
 ~10 minutes via the kubectl proxy or via direct API access. Outputs:
 
   out/keda_burst/timeline.csv     — (t, queue_depth, replicas)
@@ -115,7 +115,7 @@ See timeline.csv for the full trajectory.
         plt.plot(ts, replicas)
         plt.xlabel("seconds since flood")
         plt.ylabel("embedding-worker replicas")
-        plt.title("KEDA 0 → N → 0 on Service Bus queue depth")
+        plt.title("KEDA 0 → N → 0 on Redis queue depth")
         plt.tight_layout()
         plt.savefig(out_dir / "replicas.png", dpi=150)
     except Exception:
