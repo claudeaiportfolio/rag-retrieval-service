@@ -25,6 +25,9 @@ data:
   RERANKER_URL: 'http://reranker.query.svc.cluster.local'
   CANDIDATE_K: '40'
   RRF_K: '60'
+  # Context assembly: what actually goes in the LLM window, under a token budget.
+  ASSEMBLY_POLICY: 'rerank_then_top_k'
+  CONTEXT_TOKEN_BUDGET: '4000'
   UPLOAD_API_URL: 'http://upload-api.ingestion.svc.cluster.local:8080'
   RETRIEVAL_API_URL: 'http://retrieval-api.query.svc.cluster.local:8080'
   OTEL_EXPORTER_OTLP_ENDPOINT: 'otel-collector.otel.svc.cluster.local:4317'
