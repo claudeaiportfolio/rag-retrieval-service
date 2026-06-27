@@ -1,6 +1,6 @@
 .PHONY: tf-init tf-fmt tf-validate tf-plan tf-apply tf-destroy \
         tf-auth0-init tf-auth0-plan tf-auth0-apply \
-        render-k8s test lint typecheck secret-scan ingest eval eval-rerank eval-assembly openapi \
+        render-k8s test lint typecheck secret-scan ingest eval eval-rerank eval-assembly openapi loadtest \
         experiment smoke cluster-start cluster-stop teardown teardown-full
 
 # AzureAD-backed remote state. The provider itself uses az CLI auth
@@ -75,6 +75,10 @@ eval-assembly:
 
 experiment:
 	uv run python scripts/experiments/keda_burst.py
+
+# Per-stage p50/p95/p99 under load -> out/latency.{json,png}.
+loadtest:
+	uv run python scripts/loadtest.py --requests 200 --concurrency 10
 
 smoke:
 	uv run python scripts/smoke.py

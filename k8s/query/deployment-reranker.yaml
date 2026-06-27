@@ -1,0 +1,61 @@
+# Warm cross-encoder reranker (Hugging Face text-embeddings-inference, CPU).
+# A small single-purpose model — NOT the LLM. Kept resident (no scale-to-zero)
+# so the rerank stage doesn't pay a cold start; that warmth is part of why
+# retrieval lives on AKS rather than serverless.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reranker
+  namespace: query
+  labels:
+    app: reranker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reranker
+  template:
+    metadata:
+      labels:
+        app: reranker
+    spec:
+      containers:
+        - name: tei
+          image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+          args: ['--model-id', 'BAAI/bge-reranker-base', '--port', '80']
+          ports:
+            - containerPort: 80
+          # Model downloads on first start; give it room before readiness.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: '2'
+              memory: 3Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reranker
+  namespace: query
+  labels:
+    app: reranker
+spec:
+  selector:
+    app: reranker
+  ports:
+    - port: 80
+      targetPort: 80

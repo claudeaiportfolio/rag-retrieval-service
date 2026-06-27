@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -92,9 +93,14 @@ async def answer_query(
         span.set_attribute("rag.retrieval.rerank", rerank_on)
         span.set_attribute("rag.assembly.policy", policy)
 
+        timings: dict[str, float] = {}
+
+        t0 = perf_counter()
         embeddings = await embed_batch([req.query])
         qvec = str(embeddings[0])
+        timings["embed"] = (perf_counter() - t0) * 1000
 
+        t0 = perf_counter()
         async with app.state.pool.acquire() as conn:
             candidates = await retrieve(
                 conn,
@@ -105,6 +111,7 @@ async def answer_query(
                 hybrid=hybrid,
                 rerank_on=rerank_on,
             )
+        timings["retrieve"] = (perf_counter() - t0) * 1000
 
         chunks = [
             RetrievedChunk(
@@ -120,6 +127,7 @@ async def answer_query(
         ]
         span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
 
+        t0 = perf_counter()
         assembled = assemble(
             candidates,
             policy=policy,
@@ -127,16 +135,20 @@ async def answer_query(
             query=req.query,
             compress_per_chunk_tokens=settings.compress_per_chunk_tokens,
         )
+        timings["assemble"] = (perf_counter() - t0) * 1000
         span.set_attribute("rag.assembly.tokens", assembled.tokens)
         span.set_attribute("rag.assembly.chunks_used", assembled.chunks_used)
 
+        t0 = perf_counter()
         answer_text, model = await answer(req.query, assembled.context)
+        timings["generate"] = (perf_counter() - t0) * 1000
 
         return QueryResponse(
             answer=answer_text,
             chunks=chunks,
             model=model,
             backend=settings.generation_backend,
+            timings_ms={k: round(v, 1) for k, v in timings.items()},
             assembly_policy=policy,
             context_tokens=assembled.tokens,
             chunks_used=assembled.chunks_used,
