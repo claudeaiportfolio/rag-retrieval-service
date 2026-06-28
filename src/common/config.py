@@ -93,20 +93,19 @@ async def load_secrets() -> None:
     from azure.identity.aio import DefaultAzureCredential
     from azure.keyvault.secrets.aio import SecretClient
 
-    from azure.core.exceptions import ResourceNotFoundError
-
     credential = DefaultAzureCredential()
     async with SecretClient(vault_url=settings.key_vault_url, credential=credential) as client:
         # Load the Anthropic key whenever it isn't already set: the retrieval
         # backend may be AOAI, but answer generation can route to Claude via the
-        # provider seam. Fetched here so it never has to pass through the
-        # process environment.
+        # provider seam. It's optional — when it's missing or the vault denies
+        # access (e.g. AOAI-only deploys with no KV grant), degrade rather than
+        # crash startup; the AOAI path uses workload identity, not this key.
         if not settings.anthropic_api_key:
             try:
                 secret = await client.get_secret("anthropic-portfolio-key")
                 settings.anthropic_api_key = secret.value or ""
-            except ResourceNotFoundError:
-                logger.warning("event=anthropic_key_missing vault=%s", settings.key_vault_url)
+            except Exception:
+                logger.warning("event=anthropic_key_unavailable vault=%s", settings.key_vault_url)
         if not settings.auth0_domain:
             try:
                 secret = await client.get_secret("auth0-domain")

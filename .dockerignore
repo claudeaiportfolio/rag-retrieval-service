@@ -1,0 +1,25 @@
+# Keep the build context small: the Dockerfile only needs pyproject.toml,
+# README.md, uv.lock, and src/. Everything else (esp. the 300MB .venv) just
+# slows the build-context upload.
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+out/
+build/
+.DS_Store
+tests/
+evals/
+k8s/
+terraform/
+observability/
+corpus/
+.github/
