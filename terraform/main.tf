@@ -111,3 +111,19 @@ resource "azurerm_key_vault_secret" "redis_password" {
   value        = random_password.redis.result
   key_vault_id = data.azurerm_key_vault.shared.id
 }
+
+# The workload UAMIs read app secrets (e.g. the optional Anthropic key) from the
+# shared dev Key Vault, which lives in RG `kubernetes` outside this stack's RG.
+# Least-privilege: Secrets User (read), not a broader KV role. The app also
+# degrades gracefully if this is ever absent (common/config.load_secrets).
+resource "azurerm_role_assignment" "workload_kv_secrets" {
+  for_each = {
+    upload_api       = module.identity.upload_api.principal_id
+    embedding_worker = module.identity.embedding_worker.principal_id
+    retrieval_api    = module.identity.retrieval_api.principal_id
+    mcp_server       = module.identity.mcp_server.principal_id
+  }
+  scope                = data.azurerm_key_vault.shared.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = each.value
+}
