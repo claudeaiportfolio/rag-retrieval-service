@@ -53,10 +53,17 @@ class AzureDocIntelligenceExtractor:
         )
 
         client = self._client or self._make_client()
-        poller = await client.begin_analyze_document(
-            "prebuilt-layout",
-            AnalyzeDocumentRequest(bytes_source=blob),
-            output_content_format=DocumentContentFormat.MARKDOWN,
-        )
-        result = await poller.result()
-        return from_analyze_result(result)
+        # Close a client we created (not an injected one), so the aio session
+        # doesn't leak — one extract per document on the KEDA-scaled worker.
+        owns_client = self._client is None
+        try:
+            poller = await client.begin_analyze_document(
+                "prebuilt-layout",
+                AnalyzeDocumentRequest(bytes_source=blob),
+                output_content_format=DocumentContentFormat.MARKDOWN,
+            )
+            result = await poller.result()
+            return from_analyze_result(result)
+        finally:
+            if owns_client:
+                await client.close()
