@@ -23,6 +23,11 @@ ALTER TABLE chunks ADD COLUMN IF NOT EXISTS content_hash TEXT;
 ALTER TABLE chunks ADD COLUMN IF NOT EXISTS tsv tsvector
     GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
 
+-- Source page range from extraction provenance (Document Intelligence). NULL for
+-- paged-less formats (Markdown/text), where the citation is the heading_path.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_start INTEGER;
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_end   INTEGER;
+
 CREATE INDEX IF NOT EXISTS chunks_tenant_idx
     ON chunks (tenant_id);
 

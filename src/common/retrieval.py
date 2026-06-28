@@ -36,6 +36,8 @@ class Candidate:
     chunk_index: int
     text: str
     created_at: datetime | None
+    page_start: int | None = None
+    page_end: int | None = None
     score: float = 0.0  # final fused (and, if enabled, rerank) score
 
 
@@ -77,7 +79,8 @@ async def _bm25_ids(conn: Any, query_text: str, tenant: str, k: int) -> list[int
 async def _fetch_rows(conn: Any, ids: list[int], tenant: str) -> dict[int, Any]:
     rows = await conn.fetch(
         """
-        SELECT id, document_id, source_doc, heading_path, chunk_index, text, created_at
+        SELECT id, document_id, source_doc, heading_path, chunk_index, text, created_at,
+               page_start, page_end
         FROM chunks
         WHERE id = ANY($1::bigint[]) AND tenant_id = $2
         """,
@@ -150,6 +153,8 @@ async def retrieve(
                 chunk_index=r["chunk_index"],
                 text=r["text"],
                 created_at=r["created_at"],
+                page_start=r["page_start"],
+                page_end=r["page_end"],
                 score=score,
             )
         )

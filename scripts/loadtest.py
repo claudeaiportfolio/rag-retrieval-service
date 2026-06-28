@@ -21,12 +21,11 @@ import pathlib
 import time
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from common.http import transient_retry
 
 RETRIEVAL_API_URL = os.environ.get(
     "RETRIEVAL_API_URL", "https://retrieve.rag.dev.michaelalinks.com"
 )
-_TRANSIENT = (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.PoolTimeout)
 TENANT_ID = os.environ.get("EVAL_TENANT_ID", "evals")
 STAGES = ["embed", "retrieve", "assemble", "generate"]
 PERCENTILES = [("p50", 50), ("p95", 95), ("p99", 99)]
@@ -47,12 +46,7 @@ def _percentile(values: list[float], p: float) -> float:
     return ordered[min(len(ordered) - 1, round((p / 100) * (len(ordered) - 1)))]
 
 
-@retry(
-    retry=retry_if_exception_type(_TRANSIENT),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),
-    reraise=True,
-)
+@transient_retry()
 async def _answer(client: httpx.AsyncClient, query: str, headers: dict) -> dict:
     response = await client.post(
         f"{RETRIEVAL_API_URL}/v1/answer",

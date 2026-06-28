@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from common.azure_clients import blob_service_client
 from common.chunking import chunk_document
+from common.extraction import get_extractor
 from common.config import settings
 from common.db import create_pool
 from common.embeddings import embed_batch
@@ -74,13 +75,18 @@ async def _process(payload: dict[str, Any]) -> None:
                     blob=msg.blob_path,
                 )
                 downloader = await blob.download_blob()
-                content = (await downloader.readall()).decode("utf-8", errors="replace")
+                raw = await downloader.readall()
 
+            # Extract by content type: Markdown/text passes through; PDFs/Office
+            # go through Document Intelligence (OCR + tables + page provenance).
+            extracted = await get_extractor(msg.content_type).extract(raw, msg.content_type)
+            span.set_attribute("rag.extractor.pages", len(extracted.pages))
             chunks = chunk_document(
                 document_id=msg.document_id,
                 tenant_id=msg.tenant_id,
                 source_doc=msg.source_doc,
-                text=content,
+                text=extracted.markdown,
+                pages=extracted.pages,
                 strategy=settings.chunking_strategy,
                 chunk_size_tokens=settings.chunk_size_tokens,
                 overlap_tokens=settings.chunk_overlap_tokens,
@@ -101,30 +107,43 @@ async def _process(payload: dict[str, Any]) -> None:
         await pool.close()
 
 
+# Single source of truth for the chunks INSERT: column -> value extractor, in
+# insert order. The column list, the placeholders (incl. the ::vector cast), and
+# the row tuples are all derived from this — add a column in one place and they
+# stay in sync, instead of hand-numbering $1..$N across three spots.
+_CHUNK_COLUMNS: dict[str, Any] = {
+    "document_id": lambda c, emb: c.document_id,
+    "tenant_id": lambda c, emb: c.tenant_id,
+    "source_doc": lambda c, emb: c.source_doc,
+    "heading_path": lambda c, emb: c.heading_path,
+    "chunk_index": lambda c, emb: c.chunk_index,
+    "token_count": lambda c, emb: c.token_count,
+    "text": lambda c, emb: c.text,
+    "embedding": lambda c, emb: str(emb),
+    "content_hash": lambda c, emb: hashlib.sha256(c.text.encode("utf-8")).hexdigest(),
+    "page_start": lambda c, emb: c.page_start,
+    "page_end": lambda c, emb: c.page_end,
+}
+_VECTOR_COLUMNS = {"embedding"}
+
+# ON CONFLICT DO NOTHING dedups on (tenant_id, content_hash): re-ingesting the
+# same chunk text is a no-op rather than a duplicate that corrupts retrieval.
+_INSERT_CHUNKS_SQL = (
+    "INSERT INTO chunks ({cols}) VALUES ({vals}) "
+    "ON CONFLICT (tenant_id, content_hash) DO NOTHING"
+).format(
+    cols=", ".join(_CHUNK_COLUMNS),
+    vals=", ".join(
+        f"${i}::vector" if col in _VECTOR_COLUMNS else f"${i}"
+        for i, col in enumerate(_CHUNK_COLUMNS, start=1)
+    ),
+)
+
+
 async def _insert_chunks(pool: Any, chunks: Any, embeddings: Any) -> None:
     rows = [
-        (
-            c.document_id,
-            c.tenant_id,
-            c.source_doc,
-            c.heading_path,
-            c.chunk_index,
-            c.token_count,
-            c.text,
-            str(emb),
-            hashlib.sha256(c.text.encode("utf-8")).hexdigest(),
-        )
+        tuple(extract(c, emb) for extract in _CHUNK_COLUMNS.values())
         for c, emb in zip(chunks, embeddings, strict=True)
     ]
-    # ON CONFLICT DO NOTHING dedups on (tenant_id, content_hash): re-ingesting the
-    # same chunk text is a no-op rather than a duplicate that corrupts retrieval.
     async with pool.acquire() as conn:
-        await conn.executemany(
-            """
-            INSERT INTO chunks (document_id, tenant_id, source_doc, heading_path,
-                                chunk_index, token_count, text, embedding, content_hash)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9)
-            ON CONFLICT (tenant_id, content_hash) DO NOTHING
-            """,
-            rows,
-        )
+        await conn.executemany(_INSERT_CHUNKS_SQL, rows)

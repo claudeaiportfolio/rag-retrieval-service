@@ -23,12 +23,11 @@ import time
 from dataclasses import dataclass
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from common.http import transient_retry
 
 RETRIEVAL_API_URL = os.environ.get(
     "RETRIEVAL_API_URL", "https://retrieve.rag.dev.michaelalinks.com"
 )
-_TRANSIENT = (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.PoolTimeout)
 TENANT_ID = os.environ.get("EVAL_TENANT_ID", "evals")
 TOP_KS = [1, 3, 5, 8]
 _BEARER = os.environ.get("RAG_BEARER_TOKEN", "")
@@ -44,12 +43,7 @@ class Fixture:
     category: str = "in_corpus"
 
 
-@retry(
-    retry=retry_if_exception_type(_TRANSIENT),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),
-    reraise=True,
-)
+@transient_retry()
 async def _query(client: httpx.AsyncClient, fixture: Fixture, rerank: bool) -> tuple[dict, float]:
     start = time.perf_counter()
     response = await client.post(

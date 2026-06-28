@@ -21,7 +21,7 @@ from common.models import (
     SearchRequest,
     SearchResponse,
 )
-from common.retrieval import retrieve
+from common.retrieval import Candidate, retrieve
 from common.otel import (
     RAG_INDEX_TYPE,
     RAG_RETRIEVAL_SCORES,
@@ -48,6 +48,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="rag-retrieval-service · retrieval-api", lifespan=lifespan)
 instrument_fastapi(app)
+
+
+def _to_retrieved(c: Candidate) -> RetrievedChunk:
+    """Map an internal retrieval Candidate to the API response chunk — one place,
+    so the field list can't drift between /v1/search and /v1/answer."""
+    return RetrievedChunk(
+        document_id=c.document_id,
+        source_doc=c.source_doc,
+        heading_path=c.heading_path,
+        chunk_index=c.chunk_index,
+        text=c.text,
+        score=c.score,
+        created_at=c.created_at,
+        page_start=c.page_start,
+        page_end=c.page_end,
+    )
 
 
 @app.get("/healthz")
@@ -113,18 +129,7 @@ async def answer_query(
             )
         timings["retrieve"] = (perf_counter() - t0) * 1000
 
-        chunks = [
-            RetrievedChunk(
-                document_id=c.document_id,
-                source_doc=c.source_doc,
-                heading_path=c.heading_path,
-                chunk_index=c.chunk_index,
-                text=c.text,
-                score=c.score,
-                created_at=c.created_at,
-            )
-            for c in candidates
-        ]
+        chunks = [_to_retrieved(c) for c in candidates]
         span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
 
         t0 = perf_counter()
@@ -192,17 +197,6 @@ async def search(
                 hybrid=hybrid,
                 rerank_on=rerank_on,
             )
-        chunks = [
-            RetrievedChunk(
-                document_id=c.document_id,
-                source_doc=c.source_doc,
-                heading_path=c.heading_path,
-                chunk_index=c.chunk_index,
-                text=c.text,
-                score=c.score,
-                created_at=c.created_at,
-            )
-            for c in candidates
-        ]
+        chunks = [_to_retrieved(c) for c in candidates]
         span.set_attribute(RAG_RETRIEVAL_SCORES, [c.score for c in chunks])
         return SearchResponse(chunks=chunks, hybrid=hybrid, rerank=rerank_on)

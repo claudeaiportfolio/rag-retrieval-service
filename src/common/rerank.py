@@ -14,29 +14,14 @@ from __future__ import annotations
 
 import httpx
 
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
 from common.config import settings
+from common.http import transient_retry
 from common.otel import get_tracer
 
 tracer = get_tracer(__name__)
 
-# Transient reranker faults (pod busy / connection dropped under CPU load) are
-# retried; a 4xx like 413 is a contract error and is not retried.
-_TRANSIENT = (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.PoolTimeout)
 
-
-@retry(
-    retry=retry_if_exception_type(_TRANSIENT),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),
-    reraise=True,
-)
+@transient_retry()
 async def _call_reranker(query: str, texts: list[str]) -> list[dict]:
     # CPU cross-encoders are slow (queue + inference); give them room before a
     # ReadTimeout. retrieval.retrieve() degrades to fused order if this still fails.
