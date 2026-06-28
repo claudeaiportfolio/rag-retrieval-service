@@ -8,6 +8,15 @@ credit?"*, *"Which updated guidance notes affect our lending criteria?"* Today
 that means hunting through SharePoint by hand. This service answers the question
 directly, grounded in the firm's own documents.
 
+> **On the demo corpus (honest scope):** the evaluated corpus is *technical*
+> documentation (Kubernetes / OpenTelemetry / pgvector) used as a **stand-in**
+> for the regulated documents above — see [`corpus/README.md`](corpus/README.md).
+> It's deliberately clean and single-hop, so the eval numbers read *better* than
+> messy real-world filings would. The pipeline is corpus-agnostic; a real
+> regulated, multi-hop, clause-level corpus is the harder test where hybrid
+> retrieval, reranking, and freshness/dedup separate from naive RAG — and where
+> the measured tradeoffs (e.g. when the reranker earns its p95) likely shift.
+
 **Where the AI actually is: only at the end.** The system finds the relevant
 document chunks — that's *search* (partly keyword maths, partly small
 embedding/reranker models doing matching, not reasoning) — and then a language

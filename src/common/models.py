@@ -5,9 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
-    """Request body for POST /documents — accepted by upload-api."""
+    """Request body for POST /documents (text). Binary uses POST /documents/file."""
 
-    source_uri: str | None = None
     content: str | None = None
     content_type: str = "text/markdown"
     tenant_id: str = "default"
