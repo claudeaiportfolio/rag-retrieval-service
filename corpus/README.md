@@ -4,6 +4,18 @@ These ten Markdown documents are the **source of truth** for ingestion and
 evaluation. They are deliberately **committed to the repo and pinned**, not
 re-fetched from upstream at run time.
 
+> **Stand-in for the use case.** These are *technical* documents (Kubernetes,
+> OpenTelemetry, pgvector, Azure Service Bus) standing in for the regulated
+> financial documents the service targets (policies, guidance notes, credit
+> agreements). It's a deliberate simplification: the content is clean,
+> single-hop, and easy to ground, so eval numbers (recall@k, groundedness) read
+> **better** than messy real-world documents would. The retrieval pipeline is
+> corpus-agnostic — swapping in a regulated, multi-hop, clause-level,
+> version-conflicting corpus is the fair harder test, and the point at which
+> reranking and freshness/dedup clearly earn their cost. The committed
+> `pdf/sample-policy.pdf` is a small regulated-*style* extraction fixture; it is
+> not a financial corpus.
+
 ## Why committed, not fetched
 
 Retrieval metrics (recall@k, groundedness) are only comparable across runs if

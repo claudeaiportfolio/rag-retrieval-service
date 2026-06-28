@@ -163,15 +163,18 @@ async def retrieve(
     if rerank_on and candidates:
         try:
             order = await rerank(query, [c.text for c in candidates], top_n=top_k)
+        except Exception:
+            # A reranker blip must not fail the query — degrade to the fused
+            # (still hybrid-ranked) order and log so the dip is observable. Scoped
+            # to the rerank call only: a bug in our reorder below must NOT be
+            # masked as "reranker unavailable".
+            logger.warning("event=rerank_unavailable action=degrade_to_fused")
+        else:
             reranked: list[Candidate] = []
             for orig_idx, rscore in order:
                 c = candidates[orig_idx]
                 c.score = rscore
                 reranked.append(c)
             return reranked[:top_k]
-        except Exception:
-            # A reranker blip must not fail the query — degrade to the fused
-            # (still hybrid-ranked) order and log so the dip is observable.
-            logger.warning("event=rerank_unavailable action=degrade_to_fused")
 
     return candidates[:top_k]
