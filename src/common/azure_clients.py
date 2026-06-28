@@ -35,3 +35,11 @@ async def aoai_token() -> str:
     """Fetch a cognitive-services data-plane token. Cached by azure-identity."""
     token = await credential().get_token("https://cognitiveservices.azure.com/.default")
     return token.token
+
+
+async def aclose() -> None:
+    """Close the shared credential. Call on app shutdown (idempotent)."""
+    global _credential
+    if _credential is not None:
+        await _credential.close()
+        _credential = None

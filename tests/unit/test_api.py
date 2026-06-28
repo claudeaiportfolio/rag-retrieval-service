@@ -37,3 +37,13 @@ def test_upload_exposes_json_and_multipart_endpoints():
     paths = app.openapi()["paths"]
     assert "/documents" in paths  # JSON (text)
     assert "/documents/file" in paths  # multipart (binary)
+
+
+async def test_singleton_aclose_is_idempotent_noop():
+    # No client initialised → aclose must be a safe no-op (the shutdown path runs
+    # even if a service never built its clients).
+    from common import azure_clients, embeddings, llm
+
+    await azure_clients.aclose()
+    await embeddings.aclose()
+    await llm.aclose()

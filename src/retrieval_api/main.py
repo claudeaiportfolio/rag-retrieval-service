@@ -44,6 +44,12 @@ async def lifespan(app: FastAPI):
     app.state.pool = await create_pool(host=settings.pg_replica_host or settings.pg_host)
     yield
     await app.state.pool.close()
+    # Close shared singleton clients (dependents before the credential they use).
+    from common import azure_clients, embeddings, llm
+
+    await llm.aclose()
+    await embeddings.aclose()
+    await azure_clients.aclose()
 
 
 app = FastAPI(title="rag-retrieval-service · retrieval-api", lifespan=lifespan)

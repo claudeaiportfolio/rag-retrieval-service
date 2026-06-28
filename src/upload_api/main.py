@@ -52,6 +52,10 @@ async def lifespan(app: FastAPI):
     setup_telemetry("upload-api")
     await load_secrets()
     yield
+    # upload-api uses the shared credential (blob client); close it on shutdown.
+    from common import azure_clients
+
+    await azure_clients.aclose()
 
 
 app = FastAPI(title="rag-retrieval-service · upload-api", lifespan=lifespan)
