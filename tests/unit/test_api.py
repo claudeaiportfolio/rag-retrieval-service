@@ -29,3 +29,11 @@ def test_openapi_exposes_versioned_endpoints():
     assert "/v1/answer" in paths
     # /query stays as a deprecated alias.
     assert paths["/query"]["post"].get("deprecated") is True
+
+
+def test_upload_exposes_json_and_multipart_endpoints():
+    from upload_api.main import app
+
+    paths = app.openapi()["paths"]
+    assert "/documents" in paths  # JSON (text)
+    assert "/documents/file" in paths  # multipart (binary)
