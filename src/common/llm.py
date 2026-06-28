@@ -13,6 +13,7 @@ attributes feed the token-cost panel).
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from anthropic import APIConnectionError as AnthropicConnectionError
 from anthropic import APITimeoutError as AnthropicTimeoutError
@@ -65,6 +66,9 @@ _TRANSIENT = (
 
 # (provider, model, otel_provider_label), built once and reused.
 _provider_cache: tuple[LLMProvider, str, str] | None = None
+# The SDK client we created (Anthropic or AzureOpenAI), kept so aclose() can shut
+# it down on app shutdown without reaching into the seam provider's internals.
+_client_cache: Any = None
 
 
 def _backoff() -> dict:
@@ -76,10 +80,12 @@ def _backoff() -> dict:
 
 
 def _build_provider() -> tuple[LLMProvider, str, str]:
+    global _client_cache
     if settings.generation_backend == "anthropic":
         from anthropic import AsyncAnthropic
 
         anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        _client_cache = anthropic_client
         return AnthropicProvider(client=anthropic_client), settings.anthropic_model, "anthropic"
 
     # Azure OpenAI: AAD token provider (no key), same chat-completions surface
@@ -95,7 +101,17 @@ def _build_provider() -> tuple[LLMProvider, str, str]:
         azure_ad_token_provider=get_bearer_token_provider(credential(), _COGNITIVE_SCOPE),
         api_version="2024-10-21",
     )
+    _client_cache = aoai_client
     return OpenAIProvider(client=aoai_client), settings.aoai_chat_deployment, "azure.openai"
+
+
+async def aclose() -> None:
+    """Close the underlying provider client. Call on app shutdown (idempotent)."""
+    global _provider_cache, _client_cache
+    if _client_cache is not None:
+        await _client_cache.close()
+        _client_cache = None
+    _provider_cache = None
 
 
 def _provider() -> tuple[LLMProvider, str, str]:

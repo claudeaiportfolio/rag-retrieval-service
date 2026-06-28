@@ -101,3 +101,11 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
 
 def embedding_dim() -> int:
     return _EMBED_DIM
+
+
+async def aclose() -> None:
+    """Close the embedding client. Call on app shutdown (idempotent)."""
+    global _client
+    if _client is not None:
+        await _client.close()
+        _client = None
