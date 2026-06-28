@@ -29,6 +29,8 @@ RETRIEVAL_API_URL = os.environ.get(
 )
 TENANT_ID = os.environ.get("EVAL_TENANT_ID", "evals")
 TOP_KS = [1, 3, 5, 8]
+_BEARER = os.environ.get("RAG_BEARER_TOKEN", "")
+_HEADERS = {"Authorization": f"Bearer {_BEARER}"} if _BEARER else {}
 
 
 @dataclass
@@ -50,6 +52,7 @@ async def _query(client: httpx.AsyncClient, fixture: Fixture, rerank: bool) -> t
             "top_k": max(TOP_KS),
             "rerank": rerank,
         },
+        headers=_HEADERS,
         timeout=120,
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
