@@ -1,44 +1,74 @@
 # Live capture artefacts
 
-Captured from a real bring-up on AKS (2026-06-28): terraform apply (Postgres
-primary+replica, AOAI, storage, identity), 4 images via `az acr build`, deployed
-to the shared cluster, corpus ingested (10 docs → 55 chunks via KEDA-scaled
-workers), then load-tested through `/v1/answer`. Torn down after
-(`make teardown-full`).
+Captured from a real bring-up on AKS (2026-06-28): `terraform apply` (Postgres
+primary+replica, AOAI, storage, workload identities), 4 images via `az acr
+build`, deployed to the shared cluster, corpus ingested (10 docs → **55 chunks**
+via KEDA-scaled workers), then load-tested and evaluated through `/v1/answer`.
+Torn down after (`make teardown-full`). All four artefacts below are real
+measured numbers, not illustrations.
 
-## `latency.png` / `latency.json` — per-stage latency attribution
+## 1. Per-stage latency — `latency.{png,json}`
 
-The signature "where does the latency go" artefact. Per-stage p50 (ms), from
-the `timings_ms` the endpoint returns:
+Where the latency goes, attributed by stage (load test, 40 req, concurrency 4,
+**0 errors**):
 
 | stage | p50 (ms) | note |
 |---|---|---|
-| embed | ~200 | AOAI `text-embedding-3-small` |
-| **retrieve** | **~17,500** | **hybrid + cross-encoder rerank — dominates** |
+| embed | ~240 | AOAI `text-embedding-3-small` |
+| **retrieve** | **~34,700** | hybrid + cross-encoder rerank — **dominates** |
 | assemble | ~1 | deterministic, model-free |
-| generate | ~700–3,000 | AOAI `gpt-4o-mini` |
+| generate | ~1,100 | AOAI `gpt-4o-mini` |
 
-**The headline finding (honest, and the whole point of per-stage attribution):**
-retrieval dominates, and inside it the **cross-encoder reranker is the
-bottleneck**. `BAAI/bge-reranker-base` on a **CPU** TEI pod takes ~15–18s per
-call (queue ~7s + inference ~3s for the candidate pool) and becomes **unreliable
-under concurrency** (connection failures when many requests hit the single CPU
-pod at once). The latency is now *attributable* rather than hand-waved — exactly
-what separates a measured service from a demo.
+The reranker is the bottleneck, now *attributable* rather than asserted.
 
-**Production recommendation (the senior read):** the reranker needs a **GPU**
-node (TEI on GPU is ~10–50× faster) or a lighter reranker, plus replicas behind
-the service, before the rerank stage earns its place at production p95. On the
-CPU dev pod it does *not* — and the right move is to measure that and say so,
-not to claim a number the hardware can't hit. That's the rerank-ON/OFF tradeoff
-the eval (`make eval-rerank`) is built to quantify on adequate hardware.
+## 2. Rerank ON/OFF delta — `rerank_delta.{md,json}`
 
-## Reproduce
+The headline retrieval-quality artefact (16 in-corpus fixtures):
 
-Bring the stack up (see repo memory / SCORECARD), then:
+| metric | rerank OFF | rerank ON | Δ |
+|---|---|---|---|
+| recall@1 | 0.88 | 0.94 | **+0.06** |
+| recall@3 | 1.00 | 1.00 | 0 |
+| latency p50 | 1.3s | 18.8s | **+17.5s** |
+| latency p95 | 3.6s | 22.5s | +18.9s |
 
-```bash
-RAG_BEARER_TOKEN=$(…auth0 client_credentials…) \
-RETRIEVAL_API_URL=https://retrieve.rag.dev.michaelalinks.com \
-make loadtest eval-rerank eval-assembly
-```
+**The defensible read:** the reranker lifts recall@1 by 6 points but costs
+~17.5s p50 on a CPU pod. On this small single-hop corpus — where recall@3 is
+already perfect — that cost **isn't worth it**, and the measurement says so. On a
+larger/noisier corpus, or with a GPU reranker (~10–50× faster), the calculus
+flips. That's the whole thesis: *measure whether the reranker earns its p95, don't
+assume it.*
+
+## 3. Context-assembly policy — `assembly_table.{md,json}`
+
+Policy × (accuracy, tokens, latency); groundedness via the agent-evals judge:
+
+| policy | groundedness | recall@5 | ctx tokens | p50 (ms) |
+|---|---|---|---|---|
+| top_k_by_fused | 0.98 | 1.00 | 417 | **1,405** |
+| rerank_then_top_k | 0.98 | 1.00 | 395 | 20,381 |
+| rerank_then_compress | 0.96 | 1.00 | 395 | 19,425 |
+
+On this corpus the rerank-based policies buy **no** groundedness/recall gain for
+~15× latency, and compression slightly *hurt* groundedness (0.96). `top_k_by_fused`
+is the right policy here — chosen against a table, not inherited from a framework.
+
+## 4. KEDA autoscale — `autoscale/{replicas.png,timeline.csv,summary.md}`
+
+Ingestion burst (5 replays × 11 docs) → embedding-worker pool **0 → 10 → 0**:
+peaked at **10 replicas** on Redis queue depth, drained, settled back to zero,
+no human in the loop.
+
+---
+
+## The honest engineering takeaway
+
+The reranker dominates p95 (~17.5s/call) and on this corpus doesn't earn it.
+**Production fix:** a GPU reranker (or a lighter cross-encoder) plus the 2 warm
+replicas already in the manifest. The point of piece 1 isn't a fast number — it's
+*measuring* the tradeoff and being able to say, with data, when a stage is and
+isn't worth its cost.
+
+Reproduce: bring the stack up, then
+`RAG_BEARER_TOKEN=… RETRIEVAL_API_URL=… make loadtest eval-rerank eval-assembly`
+plus `make experiment` for the autoscale curve.

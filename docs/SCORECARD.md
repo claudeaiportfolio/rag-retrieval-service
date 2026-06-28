@@ -25,7 +25,7 @@ machinery is in; the rendered graphs land from that run).
 |---|---|---|
 | Architecture / decoupling | A → **A** | Determinate retrieval pipeline (hybrid → fuse → rerank → assemble → answer); the agent loop was *removed by design* (it reproduced a 6× negative on single-hop) and relocated to piece 2. |
 | Identity & secrets | A− → **A** | Entra ID Workload Identity Federation; Auth0 M2M; Key Vault + ESO; no secret via `os.environ`; identifying values render into a git-ignored `build/`, blocking leak scan on push + PR. |
-| Observability | A → **A−** | GenAI/MCP semconv spans + per-stage `timings_ms` on `/v1/answer`; Grafana dashboard committed. Minus: live rendered graphs pending the capture run. |
+| Observability | A → **A** | GenAI/MCP semconv spans + per-stage `timings_ms` on `/v1/answer`; Grafana dashboard committed; **live captured artefacts** (per-stage latency, rerank ON/OFF, assembly table, autoscale) in `observability/artefacts/`. |
 | Security (authz) | C → **A−** | Per-scope Auth0 JWT centralised in `common/auth.py` and enforced on both the HTTP routes and the MCP tools (`require_scope` / per-tool scopes); PyJWT + JWKS TTL. Minus: wrong-scope rejection not re-verified live this session. |
 | Resilience / error handling | C+ → **A−** | `tenacity` on the model call (both provider arms), dead-letter for poison ingest jobs, DB-touching `/readyz`, RQ `Retry`, read-replica for the query path. |
 | Testing | C+ → **B+** | `mypy` + `ruff` CI gates; 30 unit tests incl. RRF fusion, freshness, assembly packing/compression, the provider swap test, and auth-scope logic. Minus: no automated integration tests in CI (deliberate live-E2E-over-stubs). |
@@ -43,13 +43,13 @@ machinery is in; the rendered graphs land from that run).
 | Context engineering | **A−** | Explicit, swappable assembly policy under a token budget; `make eval-assembly` produces the policy × (accuracy, tokens, latency) table. Treats "what goes in the window" as a measured tradeoff. |
 | API experience | **A** | Versioned `/v1/search` + `/v1/answer`, typed Pydantic contracts, per-scope JWT, published OpenAPI; MCP alongside for agents. One service, the right interface per consumer class. |
 | Provider portability | **A−** | `llm-provider` seam (Claude + OpenAI) in `ai-infra-templates`; swap is one config value, proven by a swap test green on both arms. |
-| Scaling + latency | **B+** | Per-stage latency instrumentation + `make loadtest` (committed PNG); KEDA 0→10→0; token-cost panel. Live numbers from the capture run. |
+| Scaling + latency | **A−** | **Live-captured**: per-stage p50/p95 (rerank dominates at ~17.5s on CPU — measured, attributable), rerank ON/OFF delta (recall@1 +0.06 for +17.5s), KEDA 0→10→0 (peak 10). The honest finding (CPU reranker doesn't earn its p95 on this corpus) is the artefact's value. |
 
 ## Remaining gaps to a clean A
 
-- **Live capture** — run the load test + autoscale + Grafana against the
-  brought-up stack and commit the rendered graphs (machinery is in; teardown is
-  the `make teardown-full` standard).
+- **GPU reranker** — the live capture proved the CPU cross-encoder dominates p95
+  (~17.5s/call); production needs a GPU node or a lighter reranker (2 warm
+  replicas already in the manifest).
 - **Automated integration tests in CI** — currently relies on a live E2E.
 - **GitOps render-on-sync** — placeholder rendering on manual sync.
 

@@ -1,0 +1,47 @@
+[
+  {
+    "policy": "top_k_by_fused",
+    "groundedness": 0.9791666666666666,
+    "recall_at_k": {
+      "1": 0.875,
+      "3": 1.0,
+      "5": 1.0
+    },
+    "mean_context_tokens": 417.1875,
+    "latency_ms": {
+      "p50": 1405.297250021249,
+      "p95": 3225.872916984372
+    },
+    "n": 16
+  },
+  {
+    "policy": "rerank_then_top_k",
+    "groundedness": 0.9791666666666666,
+    "recall_at_k": {
+      "1": 0.9375,
+      "3": 1.0,
+      "5": 1.0
+    },
+    "mean_context_tokens": 394.8125,
+    "latency_ms": {
+      "p50": 20381.269500008784,
+      "p95": 21693.88258305844
+    },
+    "n": 16
+  },
+  {
+    "policy": "rerank_then_compress",
+    "groundedness": 0.9583333333333334,
+    "recall_at_k": {
+      "1": 0.9375,
+      "3": 1.0,
+      "5": 1.0
+    },
+    "mean_context_tokens": 394.5625,
+    "latency_ms": {
+      "p50": 19425.403582979925,
+      "p95": 21143.37875007186
+    },
+    "n": 16
+  }
+]
