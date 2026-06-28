@@ -22,7 +22,17 @@ spec:
       containers:
         - name: tei
           image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
-          args: ['--model-id', 'BAAI/bge-reranker-base', '--port', '80']
+          # --max-client-batch-size covers the candidate_k pool (default 32 is
+          # too small); --auto-truncate trims (query, chunk) pairs over the
+          # model's 512-token limit server-side instead of 413-ing.
+          args:
+            - '--model-id'
+            - 'BAAI/bge-reranker-base'
+            - '--port'
+            - '80'
+            - '--max-client-batch-size'
+            - '64'
+            - '--auto-truncate'
           ports:
             - containerPort: 80
           # Model downloads on first start; give it room before readiness.

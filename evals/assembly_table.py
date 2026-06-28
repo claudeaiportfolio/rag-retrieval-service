@@ -32,6 +32,8 @@ RETRIEVAL_API_URL = os.environ.get(
     "RETRIEVAL_API_URL", "https://retrieve.rag.dev.michaelalinks.com"
 )
 TENANT_ID = os.environ.get("EVAL_TENANT_ID", "evals")
+_BEARER = os.environ.get("RAG_BEARER_TOKEN", "")
+_HEADERS = {"Authorization": f"Bearer {_BEARER}"} if _BEARER else {}
 POLICIES = ["top_k_by_fused", "rerank_then_top_k", "rerank_then_compress"]
 TOP_KS = [1, 3, 5]
 
@@ -71,6 +73,7 @@ async def _query(client: httpx.AsyncClient, fixture: Fixture, policy: str) -> Sa
             "top_k": max(TOP_KS),
             "assembly_policy": policy,
         },
+        headers=_HEADERS,
         timeout=120,
     )
     latency_ms = (time.perf_counter() - start) * 1000
