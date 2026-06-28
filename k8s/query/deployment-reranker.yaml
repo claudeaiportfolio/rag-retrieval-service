@@ -10,7 +10,9 @@ metadata:
   labels:
     app: reranker
 spec:
-  replicas: 1
+  # Two warm replicas so concurrent retrieval doesn't saturate a single CPU pod
+  # (the live capture showed one pod drops connections under load).
+  replicas: 2
   selector:
     matchLabels:
       app: reranker
@@ -50,10 +52,10 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 500m
+              cpu: '1'
               memory: 1Gi
             limits:
-              cpu: '2'
+              cpu: '3'
               memory: 3Gi
 ---
 apiVersion: v1

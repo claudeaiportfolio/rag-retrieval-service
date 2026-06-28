@@ -14,10 +14,39 @@ from __future__ import annotations
 
 import httpx
 
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from common.config import settings
 from common.otel import get_tracer
 
 tracer = get_tracer(__name__)
+
+# Transient reranker faults (pod busy / connection dropped under CPU load) are
+# retried; a 4xx like 413 is a contract error and is not retried.
+_TRANSIENT = (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.PoolTimeout)
+
+
+@retry(
+    retry=retry_if_exception_type(_TRANSIENT),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
+async def _call_reranker(query: str, texts: list[str]) -> list[dict]:
+    # CPU cross-encoders are slow (queue + inference); give them room before a
+    # ReadTimeout. retrieval.retrieve() degrades to fused order if this still fails.
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(
+            f"{settings.reranker_url.rstrip('/')}/rerank",
+            json={"query": query, "texts": texts, "truncate": True},
+        )
+        resp.raise_for_status()
+        return resp.json()  # [{"index": i, "score": s}, ...]
 
 
 async def rerank(query: str, texts: list[str], top_n: int | None = None) -> list[tuple[int, float]]:
@@ -32,13 +61,7 @@ async def rerank(query: str, texts: list[str], top_n: int | None = None) -> list
 
     with tracer.start_as_current_span("rerank") as span:
         span.set_attribute("rag.rerank.candidates", n)
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{settings.reranker_url.rstrip('/')}/rerank",
-                json={"query": query, "texts": texts},
-            )
-            resp.raise_for_status()
-            results = resp.json()  # [{"index": i, "score": s}, ...]
+        results = await _call_reranker(query, texts)
         ranked = sorted(
             ((int(r["index"]), float(r["score"])) for r in results),
             key=lambda pair: pair[1],
