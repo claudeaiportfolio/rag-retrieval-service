@@ -21,10 +21,12 @@ import pathlib
 import time
 
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 RETRIEVAL_API_URL = os.environ.get(
     "RETRIEVAL_API_URL", "https://retrieve.rag.dev.michaelalinks.com"
 )
+_TRANSIENT = (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.PoolTimeout)
 TENANT_ID = os.environ.get("EVAL_TENANT_ID", "evals")
 STAGES = ["embed", "retrieve", "assemble", "generate"]
 PERCENTILES = [("p50", 50), ("p95", 95), ("p99", 99)]
@@ -45,6 +47,23 @@ def _percentile(values: list[float], p: float) -> float:
     return ordered[min(len(ordered) - 1, round((p / 100) * (len(ordered) - 1)))]
 
 
+@retry(
+    retry=retry_if_exception_type(_TRANSIENT),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
+async def _answer(client: httpx.AsyncClient, query: str, headers: dict) -> dict:
+    response = await client.post(
+        f"{RETRIEVAL_API_URL}/v1/answer",
+        json={"query": query, "tenant_id": TENANT_ID, "top_k": 8},
+        headers=headers,
+        timeout=120,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 async def _worker(
     client: httpx.AsyncClient,
     queries: list[str],
@@ -58,15 +77,9 @@ async def _worker(
         query = queries[(offset + i) % len(queries)]
         start = time.perf_counter()
         try:
-            response = await client.post(
-                f"{RETRIEVAL_API_URL}/v1/answer",
-                json={"query": query, "tenant_id": TENANT_ID, "top_k": 8},
-                headers=headers,
-                timeout=120,
-            )
-            response.raise_for_status()
+            body = await _answer(client, query, headers)
             total = (time.perf_counter() - start) * 1000
-            results.append({"total": total, "timings": response.json().get("timings_ms", {})})
+            results.append({"total": total, "timings": body.get("timings_ms", {})})
         except Exception as exc:  # noqa: BLE001 — record, don't abort the run
             results.append({"error": str(exc)[:120]})
 

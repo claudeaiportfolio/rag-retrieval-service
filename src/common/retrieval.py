@@ -15,6 +15,7 @@ step found; that's the piece-1 thesis in code.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,6 +23,8 @@ from typing import Any
 
 from common.config import settings
 from common.rerank import rerank
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -153,12 +156,17 @@ async def retrieve(
     candidates.sort(key=lambda c: c.score, reverse=True)
 
     if rerank_on and candidates:
-        order = await rerank(query, [c.text for c in candidates], top_n=top_k)
-        reranked: list[Candidate] = []
-        for orig_idx, rscore in order:
-            c = candidates[orig_idx]
-            c.score = rscore
-            reranked.append(c)
-        return reranked[:top_k]
+        try:
+            order = await rerank(query, [c.text for c in candidates], top_n=top_k)
+            reranked: list[Candidate] = []
+            for orig_idx, rscore in order:
+                c = candidates[orig_idx]
+                c.score = rscore
+                reranked.append(c)
+            return reranked[:top_k]
+        except Exception:
+            # A reranker blip must not fail the query — degrade to the fused
+            # (still hybrid-ranked) order and log so the dip is observable.
+            logger.warning("event=rerank_unavailable action=degrade_to_fused")
 
     return candidates[:top_k]
