@@ -46,8 +46,17 @@ class AssemblyResult:
     policy: AssemblyPolicy
 
 
+def _citation(chunk: Candidate) -> str:
+    cite = f"{chunk.source_doc} :: {chunk.heading_path}"
+    if chunk.page_start:
+        cite += f" :: p.{chunk.page_start}"
+        if chunk.page_end and chunk.page_end != chunk.page_start:
+            cite += f"-{chunk.page_end}"
+    return cite
+
+
 def _format(chunk: Candidate, text: str | None = None) -> str:
-    return f"[{chunk.source_doc} :: {chunk.heading_path}]\n{text if text is not None else chunk.text}"
+    return f"[{_citation(chunk)}]\n{text if text is not None else chunk.text}"
 
 
 def _compress(text: str, query: str, max_tokens: int) -> str:

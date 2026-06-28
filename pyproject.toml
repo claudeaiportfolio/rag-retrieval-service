@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.10",  # transitive for azure.identity.aio managed identity path
     "anthropic>=0.40",
     "asyncpg>=0.30",
+    "azure-ai-documentintelligence>=1.0",
     "azure-identity>=1.25.3",
     "azure-keyvault-secrets>=4.11.0",
     "azure-storage-blob>=12.24",

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     aoai_endpoint: str = ""
     aoai_embedding_deployment: str = "embedding"
     aoai_chat_deployment: str = "chat"
+    # Azure AI Document Intelligence (extraction of non-Markdown formats). Empty
+    # → only the passthrough (Markdown/text) path is available.
+    doc_intelligence_endpoint: str = ""
 
     # --- Redis / RQ queue (replaced Service Bus in Phase 2) ---
     redis_host: str = ""

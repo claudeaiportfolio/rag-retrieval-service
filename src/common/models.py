@@ -35,6 +35,10 @@ class Chunk(BaseModel):
     chunk_index: int
     token_count: int
     text: str
+    # Source page range (from extraction provenance); None for paged-less formats
+    # (Markdown/text), where the citation is the heading_path.
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 class QueryRequest(BaseModel):
@@ -65,6 +69,8 @@ class RetrievedChunk(BaseModel):
     text: str
     score: float
     created_at: datetime | None = None  # freshness signal (ingest timestamp)
+    page_start: int | None = None  # source page range for citations (None = cite heading)
+    page_end: int | None = None
 
 
 class QueryResponse(BaseModel):
