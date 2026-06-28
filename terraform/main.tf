@@ -127,3 +127,24 @@ resource "azurerm_role_assignment" "workload_kv_secrets" {
   role_definition_name = "Key Vault Secrets User"
   principal_id         = each.value
 }
+
+# Azure AI Document Intelligence — extracts non-Markdown documents (OCR + tables
+# + page provenance). AAD-only (local_auth_enabled = false); the embedding worker
+# calls it via workload identity, never a key. custom_subdomain_name is required
+# for token auth. Promote to a portfolio-infra module if a second repo needs it.
+resource "azurerm_cognitive_account" "doc_intelligence" {
+  name                  = "${local.prefix}-docintel-${local.loc_short}"
+  resource_group_name   = azurerm_resource_group.this.name
+  location              = azurerm_resource_group.this.location
+  kind                  = "FormRecognizer"
+  sku_name              = "S0"
+  custom_subdomain_name = "${local.prefix}-docintel-${local.loc_short}"
+  local_auth_enabled    = false
+  tags                  = var.tags
+}
+
+resource "azurerm_role_assignment" "worker_docintel_user" {
+  scope                = azurerm_cognitive_account.doc_intelligence.id
+  role_definition_name = "Cognitive Services User"
+  principal_id         = module.identity.embedding_worker.principal_id
+}

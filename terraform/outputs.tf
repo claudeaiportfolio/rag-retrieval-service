@@ -35,6 +35,10 @@ output "openai" {
   }
 }
 
+output "doc_intelligence_endpoint" {
+  value = azurerm_cognitive_account.doc_intelligence.endpoint
+}
+
 output "aks_oidc_issuer_url" {
   description = "AKS OIDC issuer URL used by federated credentials. Keep for k8s manifest generation."
   value       = data.azurerm_kubernetes_cluster.portfolio.oidc_issuer_url

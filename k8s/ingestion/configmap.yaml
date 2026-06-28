@@ -11,6 +11,8 @@ data:
   AOAI_ENDPOINT: __AOAI_ENDPOINT__
   AOAI_EMBEDDING_DEPLOYMENT: 'embedding'
   AOAI_CHAT_DEPLOYMENT: 'chat'
+  # Document Intelligence — the embedding worker extracts non-Markdown docs here.
+  DOC_INTELLIGENCE_ENDPOINT: __DOC_INTELLIGENCE_ENDPOINT__
   # RQ on shared self-hosted Redis (replaced Service Bus in Phase 2). Host is a
   # static in-cluster DNS name; the password is injected from the ESO-synced
   # `redis-credentials` Secret (see externalsecret.yaml), never via configmap.

@@ -26,6 +26,7 @@ dependencies = [
     "platform-core[queue] @ git+https://github.com/claudeaiportfolio/ai-infra-templates.git@platform-core-v0.1.0#subdirectory=platform-core",
     "pydantic-settings>=2.14.1",
     "pyjwt[crypto]>=2.9",
+    "python-multipart>=0.0.18",  # FastAPI multipart (binary document upload)
     "tenacity>=9.0",
     "tiktoken>=0.8",
     "uvicorn>=0.47.0",

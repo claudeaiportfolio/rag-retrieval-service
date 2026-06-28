@@ -8,7 +8,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from common.azure_clients import blob_service_client
 from common.config import load_secrets, settings
@@ -84,20 +84,26 @@ async def readyz() -> dict[str, str]:
     return {"status": "ready"}
 
 
-@app.post("/documents", status_code=202)
-async def ingest_document(req: IngestRequest) -> dict[str, str]:
-    if not req.content and not req.source_uri:
-        raise HTTPException(status_code=400, detail="content or source_uri required")
-
+async def _ingest(
+    body: bytes,
+    *,
+    source_doc: str,
+    tenant_id: str,
+    content_type: str,
+    metadata: dict[str, str],
+) -> str:
+    """Write the raw document to blob storage and enqueue it. Shared by the JSON
+    (text) and multipart (binary) endpoints so the blob-write + enqueue lives in
+    one place."""
     document_id = uuid.uuid4().hex
-    blob_path = f"{req.tenant_id}/raw/{document_id}.bin"
+    blob_path = f"{tenant_id}/raw/{document_id}.bin"
 
     with tracer.start_as_current_span("ingest_document") as span:
         span.set_attribute(RAG_DOC_ID, document_id)
-        span.set_attribute(RAG_TENANT_ID, req.tenant_id)
-        span.set_attribute("rag.source_doc", req.source_doc)
+        span.set_attribute(RAG_TENANT_ID, tenant_id)
+        span.set_attribute("rag.source_doc", source_doc)
+        span.set_attribute("rag.content_type", content_type)
 
-        body = (req.content or "").encode("utf-8")
         async with blob_service_client(settings.storage_account) as bsc:
             container = bsc.get_container_client(settings.storage_container)
             await container.upload_blob(name=blob_path, data=body, overwrite=True)
@@ -105,11 +111,11 @@ async def ingest_document(req: IngestRequest) -> dict[str, str]:
         msg_payload = IngestMessage(
             document_id=document_id,
             blob_path=blob_path,
-            tenant_id=req.tenant_id,
-            source_doc=req.source_doc,
-            content_type=req.content_type,
+            tenant_id=tenant_id,
+            source_doc=source_doc,
+            content_type=content_type,
             queued_at=datetime.now(tz=timezone.utc),
-            metadata=req.metadata,
+            metadata=metadata,
         )
 
         # RQ enqueue is synchronous (a Redis LPUSH) — offload so we don't block
@@ -124,9 +130,48 @@ async def ingest_document(req: IngestRequest) -> dict[str, str]:
         )
 
     logger.info(
-        "event=document_queued document_id=%s tenant=%s source=%s",
+        "event=document_queued document_id=%s tenant=%s source=%s type=%s",
         document_id,
-        req.tenant_id,
-        req.source_doc,
+        tenant_id,
+        source_doc,
+        content_type,
+    )
+    return document_id
+
+
+@app.post("/documents", status_code=202)
+async def ingest_document(req: IngestRequest) -> dict[str, str]:
+    """JSON ingest for text/Markdown content. Use /documents/file for binary."""
+    if not req.content:
+        raise HTTPException(
+            status_code=400, detail="content required (use /documents/file for binary)"
+        )
+    document_id = await _ingest(
+        req.content.encode("utf-8"),
+        source_doc=req.source_doc,
+        tenant_id=req.tenant_id,
+        content_type=req.content_type,
+        metadata=req.metadata,
+    )
+    return {"document_id": document_id, "status": "queued"}
+
+
+@app.post("/documents/file", status_code=202)
+async def ingest_file(
+    file: UploadFile = File(...),
+    source_doc: str = Form(...),
+    tenant_id: str = Form("default"),
+) -> dict[str, str]:
+    """Multipart ingest for binary documents (PDF/Office) — extracted by Document
+    Intelligence in the worker. Streams the file; no base64 overhead."""
+    body = await file.read()
+    if not body:
+        raise HTTPException(status_code=400, detail="empty file")
+    document_id = await _ingest(
+        body,
+        source_doc=source_doc,
+        tenant_id=tenant_id,
+        content_type=file.content_type or "application/octet-stream",
+        metadata={"filename": file.filename or ""},
     )
     return {"document_id": document_id, "status": "queued"}
